@@ -949,11 +949,16 @@ function closeModal(id){gid(id).classList.remove('open')}
 // META
 // ═══════════════════════════════════════
 function renderMeta(){
+  const sessRecepKpi=getSessRecep();
+  let vmsKpi=getVendasMes(currentMes);
+  if(sessRecepKpi)vmsKpi=vmsKpi.filter(v=>v.recep===sessRecepKpi);
   const vms=getVendasMes(currentMes);
-  const mats=vms.filter(v=>v.tipo==='MAT');
-  const rens=vms.filter(v=>v.tipo==='REN');
-  const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
-  const metaTot=RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
+  const mats=vmsKpi.filter(v=>v.tipo==='MAT');
+  const rens=vmsKpi.filter(v=>v.tipo==='REN');
+  const totalVal=vmsKpi.reduce((s,v)=>s+(+v.valor||0),0);
+  const metaTot=sessRecepKpi
+    ? (metas[sessRecepKpi]?.[currentMes]?.mat||60)
+    : RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
   const pct=metaTot>0?Math.round(mats.length/metaTot*100):0;
 
   gid('meta-kpis').innerHTML=`
