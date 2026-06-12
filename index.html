@@ -380,6 +380,9 @@ tr:hover td{background:var(--s2)}
           </div>
           <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="importFile(this)">
           <div id="import-status" style="margin-top:16px"></div>
+          <div id="undo-import-wrap" style="display:none;margin-top:10px">
+            <button class="btn btn-red" style="width:100%" onclick="desfazerImport()">↩️ Desfazer Última Importação</button>
+          </div>
           <div style="margin-top:20px;background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:16px">
             <div style="font-size:12px;font-weight:600;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">Formato esperado</div>
             <div style="font-size:13px;color:var(--mu2);line-height:1.8">
@@ -544,6 +547,7 @@ function showSync(msg, color='var(--orange)'){
 function hideSync(){const el=document.getElementById('sync-indicator');if(el)el.style.opacity='0';}
 
 let vendas = {}; // { MES: [ {id,data,recep,orig,plano,idcli,valor,tipo,mes}, ... ] }
+let lastImportBackup = null; // backup da última importação para desfazer
 let metas  = {}; // { RECEP: { MES: {mat:60, val:17050} } }
 let charts = {};
 let currentMes = 'JANEIRO';
@@ -1106,6 +1110,8 @@ function importFile(input){
   reader.onload=e=>{
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
+      // Salva backup antes de importar
+      lastImportBackup = JSON.parse(JSON.stringify(vendas));
       let totalImport=0;
       let totalIgnorado=0;
       wb.SheetNames.forEach(sheetName=>{
@@ -1154,6 +1160,7 @@ function importFile(input){
       });
       saveVendas();
       const dataFmt=fmtDate(targetDate);
+      gid('undo-import-wrap').style.display = totalImport>0 ? 'block' : 'none';
       gid('import-status').innerHTML=`
         <div style="background:rgba(34,197,94,.1);border:1px solid var(--green);border-radius:8px;padding:16px">
           <div style="color:var(--green);font-weight:700;font-size:15px;margin-bottom:6px">✅ Importação concluída!</div>
@@ -1352,6 +1359,17 @@ function abrirWADia(){
 // ═══════════════════════════════════════
 // IMPORTAR SÓ O DIA ESCOLHIDO
 // ═══════════════════════════════════════
+function desfazerImport(){
+  if(!lastImportBackup){toast('Nenhuma importação para desfazer','err');return;}
+  if(!confirm('Tem certeza? Isso vai remover todos os dados da última importação!'))return;
+  vendas = JSON.parse(JSON.stringify(lastImportBackup));
+  lastImportBackup = null;
+  saveVendas();
+  gid('undo-import-wrap').style.display='none';
+  gid('import-status').innerHTML=`<div style="background:rgba(34,197,94,.1);border:1px solid var(--green);border-radius:8px;padding:14px;color:var(--green);font-weight:600">✅ Importação desfeita com sucesso!</div>`;
+  toast('✅ Importação desfeita!','ok');
+}
+
 window.onload=function(){
   // Set logo
   const logoSrc='data:image/png;base64,'+LOGO_B64;
