@@ -1251,7 +1251,15 @@ function saveMeta(recep){
 // ═══════════════════════════════════════
 // FILTRO DATA
 // ═══════════════════════════════════════
-function getTodayISO(){return new Date().toISOString().split('T')[0]}
+function getTodayISO(){
+  const now = new Date();
+  // Fuso horário de Brasília (UTC-3)
+  const brasilia = new Date(now.toLocaleString('en-US', {timeZone: 'America/Sao_Paulo'}));
+  const y = brasilia.getFullYear();
+  const m = String(brasilia.getMonth()+1).padStart(2,'0');
+  const d = String(brasilia.getDate()).padStart(2,'0');
+  return `${y}-${m}-${d}`;
+}
 function setHoje(){gid('f-data').value=getTodayISO();renderVendasTable()}
 function limparData(){gid('f-data').value='';renderVendasTable()}
 
