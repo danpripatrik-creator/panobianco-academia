@@ -290,6 +290,7 @@ tr:hover td{background:var(--s2)}
             <option value="">Matrícula + Renovação</option>
             <option value="MAT">Só Matrículas</option>
             <option value="REN">Só Renovações</option>
+            <option value="RET">Só Retenções</option>
           </select>
           <select class="fi" id="f-orig" onchange="renderVendasTable()">
             <option value="">Todas origens</option>
@@ -351,7 +352,7 @@ tr:hover td{background:var(--s2)}
         <div class="tbl-wrap">
           <table>
             <thead>
-              <tr><th>Mês</th><th>Recepcionista</th><th>Matrículas</th><th>Renovações</th><th>Valor Total</th><th>Plano +Vendido</th></tr>
+              <tr><th>Mês</th><th>Recepcionista</th><th>Matrículas</th><th>Renovações</th><th>Retenções</th><th>Valor Total</th><th>Plano +Vendido</th></tr>
             </thead>
             <tbody id="hist-tbody"></tbody>
           </table>
@@ -461,7 +462,8 @@ tr:hover td{background:var(--s2)}
       <div class="field"><label>Tipo</label>
         <select id="v-tipo">
           <option value="MAT">Matrícula</option>
-          <option value="REN">Renovação / Retenção</option>
+          <option value="REN">Renovação</option>
+          <option value="RET">Retenção</option>
         </select>
       </div>
       <div class="field"><label>Mês</label>
@@ -659,7 +661,9 @@ function tagOrigem(orig){
 }
 
 function tagTipo(tipo){
-  return tipo==='MAT'?`<span class="tag tag-mat">Matrícula</span>`:`<span class="tag tag-ren">Renovação</span>`;
+  if(tipo==='MAT')return`<span class="tag tag-mat">Matrícula</span>`;
+  if(tipo==='RET')return`<span class="tag" style="background:rgba(168,85,247,.15);color:#c084fc">Retenção</span>`;
+  return`<span class="tag tag-ren">Renovação</span>`;
 }
 
 // ═══════════════════════════════════════
@@ -737,6 +741,7 @@ function renderDash(){
   if(sessRecepDash)vms=vms.filter(v=>v.recep===sessRecepDash);
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
+  const rets=vms.filter(v=>v.tipo==='RET');
   const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
   const totalMat=mats.length;
   const totalRen=rens.length;
@@ -746,6 +751,7 @@ function renderDash(){
   gid('dash-kpis').innerHTML=`
     <div class="kcard hi"><div class="k-lbl">Total Matrículas</div><div class="k-val" style="color:var(--ol)">${totalMat}</div><div class="k-sub">Meta: ${metaTotalMat} (${pct}%)</div></div>
     <div class="kcard ok"><div class="k-lbl">Renovações</div><div class="k-val" style="color:var(--green)">${totalRen}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard" style="border-left:3px solid #c084fc"><div class="k-lbl">Retenções</div><div class="k-val" style="color:#c084fc">${rets.length}</div><div class="k-sub">${currentMes}</div></div>
     <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:22px;color:var(--ol)">${fmtVal(totalVal)}</div><div class="k-sub">Mês: ${currentMes}</div></div>
     <div class="kcard ${pct>=100?'ok':'warn'}"><div class="k-lbl">% Meta Atingida</div><div class="k-val" style="color:${pct>=100?'var(--green)':'var(--yellow)'}">${pct}%</div><div class="k-sub">${totalMat}/${metaTotalMat} matrículas</div></div>
     <div class="kcard"><div class="k-lbl">Total Vendas</div><div class="k-val">${vms.length}</div><div class="k-sub">Matrículas + Renovações</div></div>`;
@@ -765,7 +771,7 @@ function renderDash(){
   renderChart('ch-orig','doughnut',origens,qtdOrig,['#3B82F6','#22C55E','#F59E0B','#8B5CF6','#6B7280'],'Qtd');
 
   // Chart tipo
-  renderChart('ch-tipo','bar',['Matrículas','Renovações'],[totalMat,totalRen],['#E84B1A','#22C55E'],'Qtd');
+  renderChart('ch-tipo','bar',['Matrículas','Renovações','Retenções'],[totalMat,totalRen,rets.length],['#E84B1A','#22C55E','#c084fc'],'Qtd');
 }
 
 function renderChart(id,type,labels,data,colors,label){
@@ -959,6 +965,7 @@ function renderMeta(){
   const vms=getVendasMes(currentMes);
   const mats=vmsKpi.filter(v=>v.tipo==='MAT');
   const rens=vmsKpi.filter(v=>v.tipo==='REN');
+  const rets=vmsKpi.filter(v=>v.tipo==='RET');
   const totalVal=vmsKpi.reduce((s,v)=>s+(+v.valor||0),0);
   const metaTot=sessRecepKpi
     ? (metas[sessRecepKpi]?.[currentMes]?.mat||60)
@@ -969,6 +976,7 @@ function renderMeta(){
     <div class="kcard hi"><div class="k-lbl">Matrículas ${currentMes}</div><div class="k-val" style="color:var(--ol)">${mats.length}</div><div class="k-sub">Meta: ${metaTot}</div></div>
     <div class="kcard ${pct>=100?'ok':'warn'}"><div class="k-lbl">% Meta Matrículas</div><div class="k-val" style="color:${pct>=100?'var(--green)':'var(--yellow)'}">${pct}%</div><div class="k-sub">Faltam: ${Math.max(0,metaTot-mats.length)}</div></div>
     <div class="kcard ok"><div class="k-lbl">Renovações</div><div class="k-val" style="color:var(--green)">${rens.length}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard" style="border-left:3px solid #c084fc"><div class="k-lbl">Retenções</div><div class="k-val" style="color:#c084fc">${rets.length}</div><div class="k-sub">${currentMes}</div></div>
     <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:20px;color:var(--ol)">${fmtVal(totalVal)}</div><div class="k-sub">${currentMes}</div></div>`;
 
   const sessRecepMeta=getSessRecep();
@@ -978,6 +986,7 @@ function renderMeta(){
     const metaValR=metas[r]?.[currentMes]?.val||17050;
     const matsR=mats.filter(v=>v.recep===r);
     const rensR=rens.filter(v=>v.recep===r);
+    const retsR=vms.filter(v=>v.recep===r&&v.tipo==='RET');
     const vmsR=vms.filter(v=>v.recep===r);
     const valR=vmsR.reduce((s,v)=>s+(+v.valor||0),0);
     const pctR=metaR>0?Math.min(100,Math.round(matsR.length/metaR*100)):0;
@@ -990,7 +999,8 @@ function renderMeta(){
       <div class="meta-row"><span style="color:var(--mu2)">Valor vendido</span><span style="font-weight:600">${fmtVal(valR)}</span></div>
       <div class="meta-bar-bg"><div class="meta-bar${pctValR>=100?' ok':''}" style="width:${pctValR}%;background:var(--blue)"></div></div>
       <div class="meta-stats">
-        <div class="ms"><div class="ms-val">${rensR.length}</div><div class="ms-lbl">Renovações</div></div>
+        <div class="ms"><div class="ms-val" style="color:var(--green)">${rensR.length}</div><div class="ms-lbl">Renovações</div></div>
+        <div class="ms"><div class="ms-val" style="color:#c084fc">${retsR.length}</div><div class="ms-lbl">Retenções</div></div>
         <div class="ms"><div class="ms-val" style="color:${faltam===0?'var(--green)':'var(--red)'}">${faltam}</div><div class="ms-lbl">Faltam</div></div>
         <div class="ms"><div class="ms-val">${pctR}%</div><div class="ms-lbl">% Meta</div></div>
       </div>
@@ -1033,21 +1043,23 @@ function renderHistorico(){
       if(vR.length===0)return;
       const mats=vR.filter(v=>v.tipo==='MAT').length;
       const rens=vR.filter(v=>v.tipo==='REN').length;
+      const rets=vR.filter(v=>v.tipo==='RET').length;
       const val=vR.reduce((s,v)=>s+(+v.valor||0),0);
       const planos={};vR.forEach(v=>{planos[v.plano]=(planos[v.plano]||0)+1});
       const topPlano=Object.entries(planos).sort((a,b)=>b[1]-a[1])[0]?.[0]||'-';
-      rows.push({mes:m,recep:r,mats,rens,val,topPlano});
+      rows.push({mes:m,recep:r,mats,rens,rets,val,topPlano});
     });
   });
 
   const totalMat=rows.reduce((s,r)=>s+r.mats,0);
   const totalRen=rows.reduce((s,r)=>s+r.rens,0);
+  const totalRet=rows.reduce((s,r)=>s+(r.rets||0),0);
   const totalVal=rows.reduce((s,r)=>s+r.val,0);
   gid('hist-kpis').innerHTML=`
     <div class="kcard hi"><div class="k-lbl">Total Matrículas</div><div class="k-val" style="color:var(--ol)">${totalMat}</div></div>
     <div class="kcard ok"><div class="k-lbl">Total Renovações</div><div class="k-val" style="color:var(--green)">${totalRen}</div></div>
-    <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:20px;color:var(--ol)">${fmtVal(totalVal)}</div></div>
-    <div class="kcard"><div class="k-lbl">Total Vendas</div><div class="k-val">${totalMat+totalRen}</div></div>`;
+    <div class="kcard" style="border-left:3px solid #c084fc"><div class="k-lbl">Total Retenções</div><div class="k-val" style="color:#c084fc">${totalRet}</div></div>
+    <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:20px;color:var(--ol)">${fmtVal(totalVal)}</div></div>`;
 
   gid('hist-tbody').innerHTML=rows.map(r=>`
     <tr>
@@ -1055,6 +1067,7 @@ function renderHistorico(){
       <td>${r.recep}</td>
       <td><span style="color:var(--ol);font-weight:700">${r.mats}</span></td>
       <td><span style="color:var(--green);font-weight:700">${r.rens}</span></td>
+      <td><span style="color:#c084fc;font-weight:700">${r.rets||0}</span></td>
       <td style="color:var(--ol);font-weight:600">${fmtVal(r.val)}</td>
       <td style="color:var(--mu2)">${r.topPlano}</td>
     </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--mu2);padding:30px">Nenhum dado encontrado</td></tr>';
@@ -1134,7 +1147,8 @@ function importFile(input){
           if(existIds.has(idcli)){totalIgnorado++;return;}
           const isMat=(row[6]||'').toString().trim()!=='';
           const isRen=(row[7]||'').toString().trim()!=='';
-          if(!isMat&&!isRen)return;
+          const isRet=(row[8]||'').toString().trim()!=='';
+          if(!isMat&&!isRen&&!isRet)return;
           // Valor: coluna 5, limpa R$, espaços e virgula
           const valorRaw=(row[5]||'0').toString().replace('R$','').replace(/\s/g,'').replace(',','.');
           const valor=parseFloat(valorRaw)||0;
@@ -1149,7 +1163,7 @@ function importFile(input){
             plano,
             idcli,
             valor,
-            tipo:isMat?'MAT':'REN',
+            tipo:isMat?'MAT':isRet?'RET':'REN',
             leadsHoje,leadsAnt,obs,
             mes:mesUpper
           };
@@ -1289,7 +1303,8 @@ function gerarMsgDia(recep, dataISO){
     `📅 ${dataFmt} | 👤 ${recep}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n\n` +
     `💪 *MATRÍCULAS: ${mats.length}*\n${planosStr}\n\n` +
-    `🔁 *RENOVAÇÕES: ${rens.length}*\n\n` +
+    `🔁 *RENOVAÇÕES: ${rens.length}*\n` +
+    `🤝 *RETENÇÕES: ${vms.filter(v=>v.tipo==='RET').length}*\n\n` +
     `💰 *VALOR TOTAL: ${fmtVal(totalVal)}*\n\n` +
     `🎯 Meta do mês: ${mats.length}/${metaR} (${pct}%)\n\n` +
     `📊 *Leads do dia:*\n  • Leads Hoje: ${vms.reduce((s,v)=>s+(v.leadsHoje||0),0)}\n  • Leads Antigos: ${vms.reduce((s,v)=>s+(v.leadsAnt||0),0)}\n\n` +
