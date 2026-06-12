@@ -1256,7 +1256,7 @@ function gerarMsgDia(recep, dataISO){
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
-  const dataFmt=dataISO?fmtDate(dataISO):'Dia atual';
+  const dataFmt=dataISO?fmtDate(dataISO):`Mês de ${currentMes}`;
   const metaR=metas[recep]?.[currentMes]?.mat||60;
   const pct=metaR>0?Math.round(mats.length/metaR*100):0;
 
@@ -1312,19 +1312,19 @@ function copiarWA(){
 }
 
 function waRecepDia(recep){
-  const dataISO=gid('f-data')?.value||getTodayISO();
+  const dataISO=gid('f-data')?.value||''; // vazio = mês todo
   const r=getSessRecep()||recep;
   const msg=gerarMsgDia(r,dataISO);
   abrirModalWA(msg);
 }
 
 function abrirWADia(){
-  const dataISO=gid('f-data')?.value||getTodayISO();
+  const dataISO=gid('f-data')?.value||''; // vazio = mês todo
   const vms=getVendasMes(currentMes).filter(v=>!dataISO||v.data===dataISO);
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
-  const dataFmt=fmtDate(dataISO);
+  const dataFmt=dataISO?fmtDate(dataISO):`Mês de ${currentMes}`;
   const metaTot=RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
   const pct=metaTot>0?Math.round(mats.length/metaTot*100):0;
 
