@@ -374,6 +374,25 @@ tr:hover td{background:var(--s2)}
             <label style="font-size:12px;color:var(--mu2)">Ou escolher outra data:</label>
             <input type="date" class="fi" id="import-data" style="width:auto">
           </div>
+
+          <!-- MODO IMPORTAR MES TODO - só admin -->
+          <div id="import-mes-todo-wrap" style="display:none;margin-bottom:14px">
+            <div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.3);border-radius:10px;padding:14px;display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">📆</span>
+              <div>
+                <div style="font-weight:600;margin-bottom:2px">Importar mês todo (Admin)</div>
+                <div style="font-size:12px;color:var(--mu2)">Importa <strong style="color:#60a5fa">todos os dias do mês</strong> de uma vez. Use após limpar dados para reimportar tudo do zero.</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+              <label style="font-size:12px;color:var(--mu2);white-space:nowrap">Modo:</label>
+              <select class="fi" id="import-modo">
+                <option value="dia">📅 Só o dia selecionado</option>
+                <option value="mes">📆 Mês todo (reimportar)</option>
+              </select>
+            </div>
+          </div>
+
           <div class="import-drop" id="drop-zone" onclick="document.getElementById('file-input').click()">
             <svg viewBox="0 0 24 24" style="display:block;margin:0 auto 12px;stroke:var(--mu2);fill:none;stroke-width:1.5;width:48px;height:48px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <div style="font-size:15px;font-weight:600;margin-bottom:6px">Clique ou arraste a planilha aqui</div>
@@ -397,7 +416,7 @@ tr:hover td{background:var(--s2)}
       <!-- ADMIN -->
       <div class="screen" id="s-admin">
         <div class="sec-hdr"><div class="sec-title">Usuários & Metas</div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Senhas dos Usuários</div>
             <div id="admin-users"></div>
@@ -405,6 +424,80 @@ tr:hover td{background:var(--s2)}
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Metas Mensais (Matrículas)</div>
             <div id="admin-metas"></div>
+          </div>
+        </div>
+
+        <!-- LIMPEZA DE DADOS -->
+        <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:var(--r);padding:20px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--red);text-transform:uppercase;letter-spacing:.7px">⚠️ Limpeza de Dados</div>
+          <div style="font-size:12px;color:var(--mu2);margin-bottom:16px">Atenção — estas ações não podem ser desfeitas!</div>
+          
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            
+            <!-- Limpar mês todo -->
+            <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">🗑️ Limpar Mês Todo</div>
+              <div style="font-size:11px;color:var(--mu2);margin-bottom:12px">Apaga todos os dados do mês selecionado de todas as recepcionistas</div>
+              <div class="field" style="margin-bottom:10px">
+                <label>Mês</label>
+                <select class="fi" id="cl-mes" style="width:100%">
+                  <option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option>
+                  <option value="MARÇO">Março</option><option value="ABRIL">Abril</option>
+                  <option value="MAIO">Maio</option><option value="JUNHO">Junho</option>
+                  <option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option>
+                  <option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option>
+                  <option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option>
+                </select>
+              </div>
+              <button class="btn btn-red" style="width:100%;font-size:12px" onclick="limparMes()">🗑️ Limpar Mês</button>
+            </div>
+
+            <!-- Limpar por recepcionista -->
+            <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">👤 Limpar por Recepcionista</div>
+              <div style="font-size:11px;color:var(--mu2);margin-bottom:12px">Apaga só os dados de uma recepcionista no mês selecionado</div>
+              <div class="field" style="margin-bottom:8px">
+                <label>Mês</label>
+                <select class="fi" id="cl-mes-recep" style="width:100%">
+                  <option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option>
+                  <option value="MARÇO">Março</option><option value="ABRIL">Abril</option>
+                  <option value="MAIO">Maio</option><option value="JUNHO">Junho</option>
+                  <option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option>
+                  <option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option>
+                  <option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option>
+                </select>
+              </div>
+              <div class="field" style="margin-bottom:10px">
+                <label>Recepcionista</label>
+                <select class="fi" id="cl-recep" style="width:100%">
+                  <option>NICOLE</option><option>ANDRESSA</option><option>KAREN</option><option>GEOVANNA</option>
+                </select>
+              </div>
+              <button class="btn btn-red" style="width:100%;font-size:12px" onclick="limparRecep()">🗑️ Limpar Recepcionista</button>
+            </div>
+
+            <!-- Limpar por data -->
+            <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:4px">📅 Limpar por Data</div>
+              <div style="font-size:11px;color:var(--mu2);margin-bottom:12px">Apaga só os dados de um dia específico de todas as recepcionistas</div>
+              <div class="field" style="margin-bottom:8px">
+                <label>Mês</label>
+                <select class="fi" id="cl-mes-data" style="width:100%">
+                  <option value="JANEIRO">Janeiro</option><option value="FEVEREIRO">Fevereiro</option>
+                  <option value="MARÇO">Março</option><option value="ABRIL">Abril</option>
+                  <option value="MAIO">Maio</option><option value="JUNHO">Junho</option>
+                  <option value="JULHO">Julho</option><option value="AGOSTO">Agosto</option>
+                  <option value="SETEMBRO">Setembro</option><option value="OUTUBRO">Outubro</option>
+                  <option value="NOVEMBRO">Novembro</option><option value="DEZEMBRO">Dezembro</option>
+                </select>
+              </div>
+              <div class="field" style="margin-bottom:10px">
+                <label>Data</label>
+                <input type="date" class="fi" id="cl-data" style="width:100%">
+              </div>
+              <button class="btn btn-red" style="width:100%;font-size:12px" onclick="limparData()">🗑️ Limpar Data</button>
+            </div>
+
           </div>
         </div>
       </div>
@@ -700,6 +793,9 @@ function initApp(user){
   const hRecEl=gid('h-recep');
   if(fRecEl)fRecEl.style.display=isAdmin?'':'none';
   if(hRecEl)hRecEl.style.display=isAdmin?'':'none';
+  // Mostra opção de importar mês todo só para admin
+  const imtEl=gid('import-mes-todo-wrap');
+  if(imtEl)imtEl.style.display=isAdmin?'block':'none';
   // No form nova venda, bloqueia recepcionista para recep logada
   if(!isAdmin){
     const vRecEl=gid('v-recep');
@@ -708,6 +804,8 @@ function initApp(user){
   // Set current month
   const nowMes=MESES[new Date().getMonth()];
   gid('filter-mes').value=MESES.includes(nowMes)?nowMes:'JANEIRO';
+  // Seta mês atual nos selects de limpeza
+  ['cl-mes','cl-mes-recep','cl-mes-data'].forEach(id=>{const el=gid(id);if(el)el.value=MESES.includes(nowMes)?nowMes:'JANEIRO';});
   currentMes=gid('filter-mes').value;
   goTo('dash');
 }
@@ -1117,8 +1215,9 @@ function parseDateExcel(rawDate){
 function importFile(input){
   const file=input.files[0];
   if(!file)return;
-  // Data alvo: campo import-data ou hoje
-  const targetDate=gid('import-data')?.value||getTodayISO();
+  // Verifica modo: dia ou mês todo
+  const modo = gid('import-modo')?.value || 'dia';
+  const targetDate = modo==='mes' ? null : (gid('import-data')?.value||getTodayISO());
   const reader=new FileReader();
   reader.onload=e=>{
     try{
@@ -1142,8 +1241,8 @@ function importFile(input){
           const idcli=(row[4]||'').toString().trim();
           if(!idcli||idcli==='NaN'||idcli==='undefined'||idcli==='')return;
           const dataISO=parseDateExcel(row[0]);
-          // FILTRO: só importa o dia escolhido
-          if(dataISO!==targetDate){totalIgnorado++;return;}
+          // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
+          if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
           if(existIds.has(idcli)){totalIgnorado++;return;}
           const isMat=(row[6]||'').toString().trim()!=='';
           const isRen=(row[7]||'').toString().trim()!=='';
@@ -1173,16 +1272,16 @@ function importFile(input){
         });
       });
       saveVendas();
-      const dataFmt=fmtDate(targetDate);
+      const dataFmt = targetDate ? fmtDate(targetDate) : 'Mês todo';
       gid('undo-import-wrap').style.display = totalImport>0 ? 'block' : 'none';
       gid('import-status').innerHTML=`
         <div style="background:rgba(34,197,94,.1);border:1px solid var(--green);border-radius:8px;padding:16px">
           <div style="color:var(--green);font-weight:700;font-size:15px;margin-bottom:6px">✅ Importação concluída!</div>
-          <div style="font-size:13px;color:var(--mu2)">📅 Dia importado: <strong style="color:var(--wh)">${dataFmt}</strong></div>
+          <div style="font-size:13px;color:var(--mu2)">📅 Período: <strong style="color:var(--wh)">${dataFmt}</strong></div>
           <div style="font-size:13px;color:var(--mu2)">💪 Vendas adicionadas: <strong style="color:var(--green)">${totalImport}</strong></div>
-          <div style="font-size:13px;color:var(--mu2)">⏭️ Ignoradas (outros dias ou duplicatas): <strong>${totalIgnorado}</strong></div>
+          <div style="font-size:13px;color:var(--mu2)">⏭️ Ignoradas (duplicatas): <strong>${totalIgnorado}</strong></div>
         </div>`;
-      toast(`✅ ${totalImport} vendas do dia ${dataFmt} importadas!`,'ok');
+      toast(`✅ ${totalImport} vendas importadas!`,'ok');
     }catch(err){
       gid('import-status').innerHTML=`<div style="background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:14px;color:var(--red)">❌ Erro ao importar: ${err.message}</div>`;
       toast('❌ Erro na importação','err');
@@ -1281,33 +1380,48 @@ function limparData(){gid('f-data').value='';renderVendasTable()}
 // WHATSAPP
 // ═══════════════════════════════════════
 function gerarMsgDia(recep, dataISO){
-  const vms=getVendasMes(currentMes).filter(v=>v.recep===recep&&(!dataISO||v.data===dataISO));
-  const mats=vms.filter(v=>v.tipo==='MAT');
-  const rens=vms.filter(v=>v.tipo==='REN');
-  const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
-  const dataFmt=dataISO?fmtDate(dataISO):fmtDate(getTodayISO());
-  const metaR=metas[recep]?.[currentMes]?.mat||60;
-  const pct=metaR>0?Math.round(mats.length/metaR*100):0;
+  const todayISO = dataISO || getTodayISO();
+  // Vendas do dia (para matrículas, renovações, retenções, valor, leads, origens)
+  const vmsDia = getVendasMes(currentMes).filter(v=>v.recep===recep && v.data===todayISO);
+  // Vendas do mês todo (para meta acumulada)
+  const vmsMes = getVendasMes(currentMes).filter(v=>v.recep===recep);
 
-  // Planos breakdown
+  const matsDia = vmsDia.filter(v=>v.tipo==='MAT');
+  const rensDia = vmsDia.filter(v=>v.tipo==='REN');
+  const retsDia = vmsDia.filter(v=>v.tipo==='RET');
+  const totalValDia = vmsDia.reduce((s,v)=>s+(+v.valor||0),0);
+
+  // Meta: usa acumulado do mês
+  const matsMes = vmsMes.filter(v=>v.tipo==='MAT').length;
+  const metaR = metas[recep]?.[currentMes]?.mat||60;
+  const pct = metaR>0?Math.round(matsMes/metaR*100):0;
+  const faltam = Math.max(0, metaR-matsMes);
+
+  // Planos do dia
   const planosCount={};
-  mats.forEach(v=>{planosCount[v.plano]=(planosCount[v.plano]||0)+1});
-  const planosStr=Object.entries(planosCount).map(([p,q])=>`  • ${p}: ${q}`).join('\n')||'  Nenhuma matrícula';
+  matsDia.forEach(v=>{planosCount[v.plano]=(planosCount[v.plano]||0)+1});
+  const planosStr=Object.entries(planosCount).map(([p,q])=>`  • ${p}: ${q}`).join('\n')||'  Nenhuma matrícula hoje';
 
-  // Origens
+  // Leads do dia — soma todos os registros do dia (incluindo linhas sem venda)
+  const leadsHoje = vmsDia.reduce((s,v)=>s+(v.leadsHoje||0),0);
+  const leadsAnt = vmsDia.reduce((s,v)=>s+(v.leadsAnt||0),0);
+
+  // Origens do dia
   const origCount={};
-  vms.forEach(v=>{const o=v.orig||'Outros';origCount[o]=(origCount[o]||0)+1});
+  vmsDia.filter(v=>v.plano).forEach(v=>{const o=v.orig||'Outros';origCount[o]=(origCount[o]||0)+1});
   const origStr=Object.entries(origCount).map(([o,q])=>`  • ${o}: ${q}`).join('\n')||'  -';
+
+  const dataFmt = fmtDate(todayISO);
 
   return `🏋️ *PANOBIANCO ACADEMIA*\n` +
     `📅 ${dataFmt} | 👤 ${recep}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `💪 *MATRÍCULAS: ${mats.length}*\n${planosStr}\n\n` +
-    `🔁 *RENOVAÇÕES: ${rens.length}*\n` +
-    `🤝 *RETENÇÕES: ${vms.filter(v=>v.tipo==='RET').length}*\n\n` +
-    `💰 *VALOR TOTAL: ${fmtVal(totalVal)}*\n\n` +
-    `🎯 Meta do mês: ${mats.length}/${metaR} (${pct}%)\n\n` +
-    `📊 *Leads do dia:*\n  • Leads Hoje: ${vms.reduce((s,v)=>s+(v.leadsHoje||0),0)}\n  • Leads Antigos: ${vms.reduce((s,v)=>s+(v.leadsAnt||0),0)}\n\n` +
+    `💪 *MATRÍCULAS HOJE: ${matsDia.length}*\n${planosStr}\n\n` +
+    `🔁 *RENOVAÇÕES HOJE: ${rensDia.length}*\n` +
+    `🤝 *RETENÇÕES HOJE: ${retsDia.length}*\n\n` +
+    `💰 *VALOR HOJE: ${fmtVal(totalValDia)}*\n\n` +
+    `🎯 *Meta do mês: ${matsMes}/${metaR} (${pct}%) — Faltam: ${faltam}*\n\n` +
+    `📊 *Leads do dia:*\n  • Leads Hoje: ${leadsHoje}\n  • Leads Antigos: ${leadsAnt}\n\n` +
     `📍 *Origem dos leads:*\n${origStr}\n\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `_Gerado automaticamente — Panobianco App_`;
@@ -1382,6 +1496,44 @@ function abrirWADia(){
 // ═══════════════════════════════════════
 // IMPORTAR SÓ O DIA ESCOLHIDO
 // ═══════════════════════════════════════
+function limparMes(){
+  const mes = gid('cl-mes').value;
+  const qtd = (vendas[mes]||[]).length;
+  if(qtd===0){toast('Nenhum dado encontrado para '+mes,'err');return;}
+  if(!confirm(`⚠️ Tem certeza? Isso vai apagar TODOS os ${qtd} registros de ${mes} de todas as recepcionistas!`))return;
+  vendas[mes]=[];
+  saveVendas();
+  toast('🗑️ Dados de '+mes+' apagados!','ok');
+  renderAdmin();
+}
+
+function limparRecep(){
+  const mes = gid('cl-mes-recep').value;
+  const recep = gid('cl-recep').value;
+  const antes = (vendas[mes]||[]).length;
+  vendas[mes] = (vendas[mes]||[]).filter(v=>v.recep!==recep);
+  const depois = vendas[mes].length;
+  const qtd = antes - depois;
+  if(qtd===0){toast('Nenhum dado de '+recep+' em '+mes,'err');return;}
+  if(!confirm(`⚠️ Tem certeza? Isso vai apagar ${qtd} registros de ${recep} em ${mes}!`))return;
+  saveVendas();
+  toast('🗑️ Dados de '+recep+' em '+mes+' apagados!','ok');
+}
+
+function limparData(){
+  const mes = gid('cl-mes-data').value;
+  const data = gid('cl-data').value;
+  if(!data){toast('Selecione uma data!','err');return;}
+  const antes = (vendas[mes]||[]).length;
+  vendas[mes] = (vendas[mes]||[]).filter(v=>v.data!==data);
+  const depois = vendas[mes].length;
+  const qtd = antes - depois;
+  if(qtd===0){toast('Nenhum dado encontrado para '+fmtDate(data),'err');return;}
+  if(!confirm(`⚠️ Tem certeza? Isso vai apagar ${qtd} registros do dia ${fmtDate(data)}!`))return;
+  saveVendas();
+  toast('🗑️ Dados do dia '+fmtDate(data)+' apagados!','ok');
+}
+
 function desfazerImport(){
   if(!lastImportBackup){toast('Nenhuma importação para desfazer','err');return;}
   if(!confirm('Tem certeza? Isso vai remover todos os dados da última importação!'))return;
