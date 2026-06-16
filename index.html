@@ -1293,16 +1293,17 @@ function importFile(input){
           const dataISO=parseDateExcel(row[0]);
           const idcli=(row[4]||'').toString().trim();
           const temVenda=((row[6]||'').toString().trim()!=='')||((row[7]||'').toString().trim()!=='')||((row[8]||'').toString().trim()!=='');
-          // Se não tem venda e não tem ID válido, usa data+recep como ID único para leads
+          // Se não tem venda e não tem ID válido, usa data+recep+dia como ID único para leads
+          const leadsKey = `leads_${recep}_${dataISO}`;
           const idFinal = (!idcli||idcli==='NaN'||idcli==='undefined'||idcli==='')
-            ? (temVenda ? null : `leads_${recep}_${dataISO}`)
+            ? (temVenda ? null : leadsKey)
             : idcli;
           if(!idFinal)return;
           // Linhas de leads sempre substituem (remove antigo se existir)
           if(existIds.has(idFinal)){
             if(idFinal.startsWith('leads_')){
               // Remove linha de leads antiga e adiciona nova atualizada
-              vendas[mesUpper]=vendas[mesUpper].filter(v=>v.idcli!==idFinal);
+              vendas[mesUpper]=(vendas[mesUpper]||[]).filter(v=>v.idcli!==idFinal);
               existIds.delete(idFinal);
             } else {
               totalIgnorado++;return;
@@ -1316,8 +1317,9 @@ function importFile(input){
           const isRet=(row[8]||'').toString().trim()!=='';
           const leadsHojeCheck=parseInt((row[9]||'0').toString().replace(/[^0-9]/g,''))||0;
           const leadsAntCheck=parseInt((row[10]||'0').toString().replace(/[^0-9]/g,''))||0;
+          const temLeads=leadsHojeCheck>0||leadsAntCheck>0;
           // Importa se tiver venda OU leads
-          if(!isMat&&!isRen&&!isRet&&!leadsHojeCheck&&!leadsAntCheck)return;
+          if(!isMat&&!isRen&&!isRet&&!temLeads)return;
           // Valor: coluna 5, limpa R$, espaços e virgula
           const valorRaw=(row[5]||'0').toString().replace('R$','').replace(/\s/g,'').replace(',','.');
           const valor=parseFloat(valorRaw)||0;
