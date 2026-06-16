@@ -1344,22 +1344,21 @@ function importFile(input){
         const rowsCanc=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,dateNF:'yyyy-mm-dd'});
         if(!cancelamentos[mesCanc])cancelamentos[mesCanc]=[];
         const existCancIds=new Set(cancelamentos[mesCanc].map(v=>v.idcli?.toString()));
-        rowsCanc.forEach(row=>{
+        rowsCanc.forEach(function(row){
           // Detecta formato da aba (colunas variam por mês)
-          const r0=str(row[0]);
+          var r0=str(row[0]);
           if(!r0||r0.includes('CANCEL')||r0.includes('DATA')||r0.includes('Vocês'))return;
-          const dataISO=parseDateExcel(row[0]);
-          if(!dataISO)return;
+          var dataISOcanc=parseDateExcel(row[0]);
+          if(!dataISOcanc)return;
           // Tenta detectar colunas de ID (pode ser col 3, 4 ou 5)
-          let idcli='',motivo='',atendente='',contato='',dataCanc='',termoEnv='',termoAss='';
+          var idcli='',motivo='',atendente='',contato='',dataCanc='',termoEnv='',termoAss='';
           // Formato JUNHO: DATA|LIB|ENVIADO_POR|EMAIL|ASSINADO|ID|MOTIVO|ATENDENTE|CONTATO|OBS
           // Formato anterior: DATA|LIB|ENVIADO|ASSINADO|ID|MOTIVO|ATENDENTE|CONTATO|OBS
-          const hasEmail=typeof row[3]==='string'&&(row[3]||'').toString().includes('panobianco');
+          var hasEmail=typeof row[3]==='string'&&(row[3]||'').toString().includes('panobianco');
           if(hasEmail){
             idcli=str(row[5]);motivo=str(row[6]);atendente=str(row[7]).toUpperCase();contato=str(row[8]);
             termoEnv=str(row[2]);termoAss=str(row[4]);dataCanc=parseDateExcel(row[9])||str(row[9]);
           } else if(str(row[2]).length>2&&!['SIM','NÃO','NAO'].includes(str(row[2]).toUpperCase())){
-            // Formato com ENVIADO_POR como nome
             idcli=str(row[4]);motivo=str(row[5]);atendente=str(row[6]).toUpperCase();contato=str(row[7]);
             termoEnv=str(row[2]);termoAss=str(row[3]);dataCanc=parseDateExcel(row[8])||str(row[8]);
           } else {
@@ -1368,8 +1367,8 @@ function importFile(input){
           }
           if(!idcli||idcli==='nan'||idcli==='NaN'||existCancIds.has(idcli))return;
           // Filtra por data se modo dia
-          if(targetDate&&dataISO!==targetDate)return;
-          cancelamentos[mesCanc].push({id:uid(),data:dataISO,idcli,motivo,atendente,contato,termoEnv,termoAss,dataCanc,mes:mesCanc});
+          if(targetDate&&dataISOcanc!==targetDate)return;
+          cancelamentos[mesCanc].push({id:uid(),data:dataISOcanc,idcli,motivo,atendente,contato,termoEnv,termoAss,dataCanc,mes:mesCanc});
           existCancIds.add(idcli);
         });
       });
