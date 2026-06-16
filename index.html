@@ -840,6 +840,7 @@ function renderDash(){
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const rets=vms.filter(v=>v.tipo==='RET');
+  const totalValReal=vms.filter(v=>v.tipo!=='LEADS').reduce((s,v)=>s+(+v.valor||0),0);
   const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
   const totalMat=mats.length;
   const totalRen=rens.length;
@@ -1239,7 +1240,14 @@ function importFile(input){
           if(recep==='GEOVANNA')recep='GEOVANNA';
           if(!RECEPS_IMPORT.includes(recep)&&!RECEPS.includes(recep))return;
           const idcli=(row[4]||'').toString().trim();
-          if(!idcli||idcli==='NaN'||idcli==='undefined'||idcli==='')return;
+          const temVenda=((row[6]||'').toString().trim()!=='')||((row[7]||'').toString().trim()!=='')||((row[8]||'').toString().trim()!=='');
+          // Se não tem venda e não tem ID válido, usa data+recep como ID único para leads
+          const idFinal = (!idcli||idcli==='NaN'||idcli==='undefined'||idcli==='')
+            ? (temVenda ? null : `leads_${recep}_${dataISO}`)
+            : idcli;
+          if(!idFinal)return;
+          // Evita duplicar linha de leads do mesmo dia
+          if(existIds.has(idFinal)){totalIgnorado++;return;}
           const dataISO=parseDateExcel(row[0]);
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
@@ -1247,7 +1255,10 @@ function importFile(input){
           const isMat=(row[6]||'').toString().trim()!=='';
           const isRen=(row[7]||'').toString().trim()!=='';
           const isRet=(row[8]||'').toString().trim()!=='';
-          if(!isMat&&!isRen&&!isRet)return;
+          const leadsHojeCheck=parseInt((row[9]||'0').toString().replace(/[^0-9]/g,''))||0;
+          const leadsAntCheck=parseInt((row[10]||'0').toString().replace(/[^0-9]/g,''))||0;
+          // Importa se tiver venda OU leads
+          if(!isMat&&!isRen&&!isRet&&!leadsHojeCheck&&!leadsAntCheck)return;
           // Valor: coluna 5, limpa R$, espaços e virgula
           const valorRaw=(row[5]||'0').toString().replace('R$','').replace(/\s/g,'').replace(',','.');
           const valor=parseFloat(valorRaw)||0;
@@ -1260,9 +1271,9 @@ function importFile(input){
             id:uid(),data:dataISO,recep,
             orig:(row[2]||'').toString().replace(/\.$/,'').trim(),
             plano,
-            idcli,
+            idcli:idFinal,
             valor,
-            tipo:isMat?'MAT':isRet?'RET':'REN',
+            tipo:isMat?'MAT':isRet?'RET':(isRen?'REN':'LEADS'),
             leadsHoje,leadsAnt,obs,
             mes:mesUpper
           };
@@ -1389,7 +1400,7 @@ function gerarMsgDia(recep, dataISO){
   const matsDia = vmsDia.filter(v=>v.tipo==='MAT');
   const rensDia = vmsDia.filter(v=>v.tipo==='REN');
   const retsDia = vmsDia.filter(v=>v.tipo==='RET');
-  const totalValDia = vmsDia.reduce((s,v)=>s+(+v.valor||0),0);
+  const totalValDia = vmsDia.filter(v=>v.tipo!=='LEADS').reduce((s,v)=>s+(+v.valor||0),0);
 
   // Meta: usa acumulado do mês
   const matsMes = vmsMes.filter(v=>v.tipo==='MAT').length;
@@ -1402,9 +1413,9 @@ function gerarMsgDia(recep, dataISO){
   matsDia.forEach(v=>{planosCount[v.plano]=(planosCount[v.plano]||0)+1});
   const planosStr=Object.entries(planosCount).map(([p,q])=>`  • ${p}: ${q}`).join('\n')||'  Nenhuma matrícula hoje';
 
-  // Leads do dia — soma todos os registros do dia (incluindo linhas sem venda)
-  const leadsHoje = vmsDia.reduce((s,v)=>s+(v.leadsHoje||0),0);
-  const leadsAnt = vmsDia.reduce((s,v)=>s+(v.leadsAnt||0),0);
+  // Leads do dia — soma TODOS os registros do dia incluindo linhas só de leads
+  const leadsHoje = vmsDia.reduce((s,v)=>s+(+v.leadsHoje||0),0);
+  const leadsAnt = vmsDia.reduce((s,v)=>s+(+v.leadsAnt||0),0);
 
   // Origens do dia
   const origCount={};
