@@ -1290,6 +1290,7 @@ function importFile(input){
           // Normaliza GEOVANNA -> GEOVANNA
           if(recep==='GEOVANNA')recep='GEOVANNA';
           if(!RECEPS_IMPORT.includes(recep)&&!RECEPS.includes(recep))return;
+          const dataISO=parseDateExcel(row[0]);
           const idcli=(row[4]||'').toString().trim();
           const temVenda=((row[6]||'').toString().trim()!=='')||((row[7]||'').toString().trim()!=='')||((row[8]||'').toString().trim()!=='');
           // Se não tem venda e não tem ID válido, usa data+recep como ID único para leads
@@ -1299,7 +1300,6 @@ function importFile(input){
           if(!idFinal)return;
           // Evita duplicar linha de leads do mesmo dia
           if(existIds.has(idFinal)){totalIgnorado++;return;}
-          const dataISO=parseDateExcel(row[0]);
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
           if(existIds.has(idcli)){totalIgnorado++;return;}
