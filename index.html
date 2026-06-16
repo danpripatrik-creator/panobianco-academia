@@ -1298,8 +1298,16 @@ function importFile(input){
             ? (temVenda ? null : `leads_${recep}_${dataISO}`)
             : idcli;
           if(!idFinal)return;
-          // Evita duplicar linha de leads do mesmo dia
-          if(existIds.has(idFinal)){totalIgnorado++;return;}
+          // Linhas de leads sempre substituem (remove antigo se existir)
+          if(existIds.has(idFinal)){
+            if(idFinal.startsWith('leads_')){
+              // Remove linha de leads antiga e adiciona nova atualizada
+              vendas[mesUpper]=vendas[mesUpper].filter(v=>v.idcli!==idFinal);
+              existIds.delete(idFinal);
+            } else {
+              totalIgnorado++;return;
+            }
+          }
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
           if(existIds.has(idcli)){totalIgnorado++;return;}
