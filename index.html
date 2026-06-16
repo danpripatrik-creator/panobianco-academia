@@ -1311,7 +1311,7 @@ function importFile(input){
           }
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
-          if(existIds.has(idcli)){totalIgnorado++;return;}
+          if(idcli&&idcli!==''&&idcli!=='NaN'&&existIds.has(idcli)){totalIgnorado++;return;}
           const isMat=(row[6]||'').toString().trim()!=='';
           const isRen=(row[7]||'').toString().trim()!=='';
           const isRet=(row[8]||'').toString().trim()!=='';
