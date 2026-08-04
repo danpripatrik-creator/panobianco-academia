@@ -452,21 +452,15 @@ tr:hover td{background:var(--s2)}
       <!-- ADMIN -->
       <div class="screen" id="s-admin">
         <div class="sec-hdr"><div class="sec-title">Usuários & Metas</div></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px">
-          <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Senhas dos Usuários</div>
-            <div id="admin-users"></div>
-          </div>
-          <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Metas Mensais (Matrículas)</div>
-            <div id="admin-metas"></div>
-          </div>
+        <div style="max-width:420px;margin-bottom:24px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Senha do Administrador</div>
+          <div id="admin-users"></div>
         </div>
 
         <!-- CONSULTORAS -->
         <div style="margin-bottom:24px">
-          <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Consultoras (Recepcionistas)</div>
-          <div id="admin-receps" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Gerenciar Consultoras</div>
+          <div id="admin-receps" style="margin-bottom:14px"></div>
           <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
             <div style="font-weight:600;font-size:13px;margin-bottom:10px">+ Adicionar Consultora</div>
             <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
@@ -658,9 +652,11 @@ const PLANO_VALORES = {
 
 const MESES = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
 let RECEPS = ['NICOLE','ANDRESSA','KAREN','GEOVANNA']; // dinâmico: sincronizado com o Firebase (db.ref('receps'))
+let RECEPS_INATIVAS = []; // consultoras desativadas (mantidas na lista, mas sem login/lançamento novo) — db.ref('recepsInativas')
 const RECEPS_IMPORT = ['NICOLE','ANDRESSA','KAREN','GEOVANNA','GEOVANNA','ANDRIELLE','STEFANIE','CAMILA','MARIANA'];
 const PALETA_RECEP = ['#E84B1A','#3B82F6','#22C55E','#F59E0B','#A855F7','#EC4899','#14B8A6','#EAB308','#06B6D4','#F43F5E','#84CC16','#F97316'];
 function corRecep(i){return PALETA_RECEP[i % PALETA_RECEP.length]}
+function recepsAtivas(){return RECEPS.filter(r=>!RECEPS_INATIVAS.includes(r))}
 
 // ═══════════════════════════════════════
 // STATE
@@ -779,14 +775,23 @@ function listenReceps(){
     const active=document.querySelector('.screen.active');
     if(active) goTo(active.id.replace('s-',''));
   });
+  db.ref('recepsInativas').on('value', snap=>{
+    RECEPS_INATIVAS=snap.val()||[];
+    renderRecepSelects();
+    if(gid('s-admin')?.classList.contains('active')) renderAdmin();
+  });
 }
 function saveReceps(){ db.ref('receps').set(RECEPS); }
+function saveRecepsInativas(){ db.ref('recepsInativas').set(RECEPS_INATIVAS); }
 
 // Repopula todos os <select> do app que listam consultoras
+// Filtros de histórico/revisão mostram TODAS (ativas + inativas, pra não perder acesso ao passado)
+// Lançamento de nova venda mostra só as ATIVAS
 function renderRecepSelects(){
-  const opts=RECEPS.map(r=>`<option>${r}</option>`).join('');
-  const optsComTodas=`<option value="">Todas recepcionistas</option>`+opts;
-  const optsComTodosAtend=`<option value="">Todos atendentes</option>`+opts;
+  const optsTodas=RECEPS.map(r=>`<option>${r}</option>`).join('');
+  const optsAtivas=recepsAtivas().map(r=>`<option>${r}</option>`).join('');
+  const optsComTodas=`<option value="">Todas recepcionistas</option>`+optsTodas;
+  const optsComTodosAtend=`<option value="">Todos atendentes</option>`+optsTodas;
   ['f-recep','h-recep'].forEach(id=>{
     const el=gid(id); if(!el)return;
     const cur=el.value; el.innerHTML=optsComTodas;
@@ -795,9 +800,9 @@ function renderRecepSelects(){
   const cf=gid('cf-atend');
   if(cf){const cur=cf.value; cf.innerHTML=optsComTodosAtend; if(RECEPS.includes(cur))cf.value=cur;}
   const cl=gid('cl-recep');
-  if(cl){const cur=cl.value; cl.innerHTML=opts; cl.value=RECEPS.includes(cur)?cur:(RECEPS[0]||'');}
+  if(cl){const cur=cl.value; cl.innerHTML=optsTodas; cl.value=RECEPS.includes(cur)?cur:(RECEPS[0]||'');}
   const vr=gid('v-recep');
-  if(vr){const cur=vr.value; vr.innerHTML=opts; vr.value=RECEPS.includes(cur)?cur:(RECEPS[0]||'');}
+  if(vr){const cur=vr.value; const ativas=recepsAtivas(); vr.innerHTML=optsAtivas; vr.value=ativas.includes(cur)?cur:(ativas[0]||'');}
 }
 
 function slugRecep(nome){
@@ -835,54 +840,91 @@ function addRecep(){
   renderAdmin();
 }
 
-function renameRecep(oldName){
-  const input=gid('rn-'+oldName);
-  const novoRaw=input.value.trim();
-  if(!novoRaw){toast('Digite um nome válido','err');return;}
-  const novo=novoRaw.toUpperCase();
-  if(novo===oldName){toast('Nome não mudou','err');return;}
-  if(RECEPS.includes(novo)){toast('Já existe uma consultora com esse nome','err');return;}
+let editingRecepCard=null;
 
-  // 1) Lista de consultoras
-  RECEPS=RECEPS.map(r=>r===oldName?novo:r);
-  saveReceps();
+function salvarEdicaoRecep(oldName){
+  const novoNomeRaw=gid('ed-nome-'+oldName).value.trim();
+  const novaSenha=gid('ed-senha-'+oldName).value.trim();
+  const mat=+gid('ed-mat-'+oldName).value||0;
+  const val=+gid('ed-val-'+oldName).value||0;
+  if(!novoNomeRaw){toast('Nome inválido','err');return;}
+  const novoNome=novoNomeRaw.toUpperCase();
 
-  // 2) Usuário de login (mantém o mesmo login, só troca o nome de exibição)
+  if(novoNome!==oldName){
+    if(RECEPS.includes(novoNome)){toast('Já existe uma consultora com esse nome','err');return;}
+    // 1) Lista de consultoras (+ inativas, se for o caso)
+    RECEPS=RECEPS.map(r=>r===oldName?novoNome:r);
+    saveReceps();
+    if(RECEPS_INATIVAS.includes(oldName)){
+      RECEPS_INATIVAS=RECEPS_INATIVAS.map(r=>r===oldName?novoNome:r);
+      saveRecepsInativas();
+    }
+    // 2) Metas
+    if(metas[oldName]){metas[novoNome]=metas[oldName]; delete metas[oldName];}
+    // 3) Vendas — renomeia em todo o histórico
+    Object.keys(vendas).forEach(mes=>{
+      (vendas[mes]||[]).forEach(v=>{if(v.recep===oldName)v.recep=novoNome;});
+    });
+    saveVendas();
+    // 4) Cancelamentos — renomeia em todo o histórico
+    Object.keys(cancelamentos).forEach(mes=>{
+      (cancelamentos[mes]||[]).forEach(c=>{if(c.atendente===oldName)c.atendente=novoNome;});
+    });
+    saveCancelamentos();
+  }
+
+  // Meta do mês atual
+  metas[novoNome]=metas[novoNome]||{};
+  metas[novoNome][currentMes]={mat,val};
+  saveMetas();
+
+  // Nome de exibição + senha do usuário de login
   const users=getUsers();
   const ui=users.findIndex(u=>u.name.toUpperCase()===oldName);
-  if(ui>-1){users[ui].name=novoRaw; saveUsers(users);}
+  if(ui>-1){
+    users[ui].name=novoNomeRaw;
+    if(novaSenha)users[ui].p=novaSenha;
+    saveUsers(users);
+  }
 
-  // 3) Metas
-  if(metas[oldName]){metas[novo]=metas[oldName]; delete metas[oldName]; saveMetas();}
-
-  // 4) Vendas — renomeia em todo o histórico
-  Object.keys(vendas).forEach(mes=>{
-    (vendas[mes]||[]).forEach(v=>{if(v.recep===oldName)v.recep=novo;});
-  });
-  saveVendas();
-
-  // 5) Cancelamentos — renomeia em todo o histórico
-  Object.keys(cancelamentos).forEach(mes=>{
-    (cancelamentos[mes]||[]).forEach(c=>{if(c.atendente===oldName)c.atendente=novo;});
-  });
-  saveCancelamentos();
-
-  toast(`✅ Renomeado para ${novoRaw}! Histórico atualizado.`,'ok');
+  editingRecepCard=null;
+  toast('✅ Consultora atualizada!','ok');
   renderAdmin();
 }
 
-function deleteRecep(nome){
-  if(!confirm(`⚠️ Tem certeza que deseja remover ${nome}?\n\nO histórico de vendas dela será mantido, mas ela sairá da lista ativa e não poderá mais fazer login.`))return;
+function toggleAtivaRecep(nome){
+  if(RECEPS_INATIVAS.includes(nome)){
+    RECEPS_INATIVAS=RECEPS_INATIVAS.filter(x=>x!==nome);
+    toast(`✅ ${nome} reativada!`,'ok');
+  } else {
+    if(!confirm(`Desativar ${nome}?\n\nEla não vai mais conseguir logar nem aparecer pra novas vendas, mas o histórico continua intacto. Você pode reativar quando quiser.`))return;
+    RECEPS_INATIVAS=[...RECEPS_INATIVAS,nome];
+    toast(`${nome} desativada.`,'ok');
+  }
+  saveRecepsInativas();
+  renderAdmin();
+}
+
+function excluirRecepPermanente(nome){
+  if(!confirm(`⚠️ EXCLUIR PERMANENTEMENTE ${nome}?\n\nIsso vai apagar o cadastro E todo o histórico de vendas e cancelamentos dela. Essa ação NÃO pode ser desfeita!\n\nSe quiser só tirar ela da lista ativa mantendo o histórico, use "Desativar" em vez disso.`))return;
+  if(!confirm('Tem certeza mesmo? Essa é a confirmação final.'))return;
 
   RECEPS=RECEPS.filter(r=>r!==nome);
   saveReceps();
+  RECEPS_INATIVAS=RECEPS_INATIVAS.filter(r=>r!==nome);
+  saveRecepsInativas();
 
   if(metas[nome]){delete metas[nome]; saveMetas();}
+
+  Object.keys(vendas).forEach(mes=>{vendas[mes]=(vendas[mes]||[]).filter(v=>v.recep!==nome);});
+  saveVendas();
+  Object.keys(cancelamentos).forEach(mes=>{cancelamentos[mes]=(cancelamentos[mes]||[]).filter(c=>c.atendente!==nome);});
+  saveCancelamentos();
 
   const users=getUsers().filter(u=>u.name.toUpperCase()!==nome);
   saveUsers(users);
 
-  toast(`${nome} removida da lista ativa. Histórico mantido.`,'ok');
+  toast(`${nome} excluída permanentemente.`,'ok');
   renderAdmin();
 }
 function loadMetas(){
@@ -944,6 +986,10 @@ function doLogin(){
   const users=getUsers();
   const user=users.find(x=>x.u.toLowerCase()===u&&x.p===p);
   if(!user){gid('lerr').textContent='Usuário ou senha incorretos!';return}
+  if(user.role==='recep' && RECEPS_INATIVAS.includes(user.name.toUpperCase())){
+    gid('lerr').textContent='Usuária desativada. Fale com o administrador.';
+    return;
+  }
   setSession(user);
   gid('ls').style.display='none';
   gid('app').style.display='block';
@@ -1575,7 +1621,7 @@ function exportExcel(){
 // ═══════════════════════════════════════
 function renderAdmin(){
   const users=getUsers();
-  gid('admin-users').innerHTML=users.map(u=>`
+  gid('admin-users').innerHTML=users.filter(u=>u.role==='admin').map(u=>`
     <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px;margin-bottom:10px">
       <div style="font-weight:600;margin-bottom:10px">${u.name} <span style="font-size:11px;color:var(--mu2)">(${u.role})</span></div>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end">
@@ -1584,25 +1630,48 @@ function renderAdmin(){
       </div>
     </div>`).join('');
 
-  gid('admin-metas').innerHTML=RECEPS.map(r=>`
-    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px;margin-bottom:10px">
-      <div style="font-weight:600;margin-bottom:10px">${r}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
-        <div class="field"><label>Meta Mat.</label><input type="number" id="mm-${r}" value="${metas[r]?.[currentMes]?.mat||60}"></div>
-        <div class="field"><label>Meta R$</label><input type="number" id="mv-${r}" value="${metas[r]?.[currentMes]?.val||17050}"></div>
-        <button class="btn btn-orange btn-sm" onclick="saveMeta('${r}')">Salvar</button>
-      </div>
-    </div>`).join('');
+  gid('admin-receps').innerHTML=RECEPS.map(r=>{
+    const inativa=RECEPS_INATIVAS.includes(r);
+    const u=users.find(x=>x.name && x.name.toUpperCase()===r)||{};
+    const nomeExib=u.name||(r.charAt(0)+r.slice(1).toLowerCase());
+    const login=u.u||slugRecep(nomeExib);
+    const mat=metas[r]?.[currentMes]?.mat??60;
+    const val=metas[r]?.[currentMes]?.val??17050;
+    const inicial=nomeExib.charAt(0).toUpperCase();
 
-  gid('admin-receps').innerHTML=RECEPS.map(r=>`
-    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
-      <div style="font-weight:600;margin-bottom:10px">${r}</div>
-      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end">
-        <div class="field"><label>Renomear</label><input type="text" class="fi" id="rn-${r}" value="${r.charAt(0)+r.slice(1).toLowerCase()}"></div>
-        <button class="btn btn-orange btn-sm" onclick="renameRecep('${r}')">Salvar</button>
-        <button class="btn btn-red btn-sm" onclick="deleteRecep('${r}')">🗑️</button>
+    if(editingRecepCard===r){
+      return `
+      <div style="background:var(--s2);border:1px solid var(--orange);border-radius:10px;padding:16px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1.3fr 1fr .8fr 1fr auto;gap:10px;align-items:end">
+          <div class="field"><label>Nome</label><input class="fi" id="ed-nome-${r}" value="${nomeExib}"></div>
+          <div class="field"><label>Nova Senha</label><input class="fi" id="ed-senha-${r}" placeholder="deixe em branco p/ manter"></div>
+          <div class="field"><label>Meta Mat.</label><input type="number" class="fi" id="ed-mat-${r}" value="${mat}"></div>
+          <div class="field"><label>Meta R$</label><input type="number" class="fi" id="ed-val-${r}" value="${val}"></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-orange btn-sm" onclick="salvarEdicaoRecep('${r}')">Salvar</button>
+            <button class="btn btn-ghost btn-sm" onclick="editingRecepCard=null;renderAdmin()">Cancelar</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    return `
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:10px;padding:16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;${inativa?'opacity:.55':''}">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:44px;height:44px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0">${inicial}</div>
+        <div>
+          <div style="font-weight:700;font-size:15px">${nomeExib}${inativa?' <span style="font-size:11px;color:var(--mu2);font-weight:500">(inativa)</span>':''}</div>
+          <div style="font-size:12px;color:var(--mu2)">@${login}</div>
+          <div style="font-size:12px;color:var(--ol);margin-top:2px">Meta Mat.: ${mat} mat. • ${fmtVal(val)}</div>
+        </div>
       </div>
-    </div>`).join('')||'<div style="color:var(--mu2);font-size:12px">Nenhuma consultora cadastrada</div>';
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" onclick="editingRecepCard='${r}';renderAdmin()">✏️ Editar</button>
+        <button class="btn btn-ghost btn-sm" style="${inativa?'':'border-color:var(--yellow);color:var(--yellow)'}" onclick="toggleAtivaRecep('${r}')">${inativa?'🔓 Reativar':'🔒 Desativar'}</button>
+        <button class="btn btn-red btn-sm" onclick="excluirRecepPermanente('${r}')">🗑️ Excluir</button>
+      </div>
+    </div>`;
+  }).join('')||'<div style="color:var(--mu2);font-size:12px">Nenhuma consultora cadastrada</div>';
 }
 function savePw(uname){
   const users=getUsers();
