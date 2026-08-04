@@ -463,6 +463,20 @@ tr:hover td{background:var(--s2)}
           </div>
         </div>
 
+        <!-- CONSULTORAS -->
+        <div style="margin-bottom:24px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:12px;color:var(--mu2);text-transform:uppercase;letter-spacing:.7px">Consultoras (Recepcionistas)</div>
+          <div id="admin-receps" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px"></div>
+          <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
+            <div style="font-weight:600;font-size:13px;margin-bottom:10px">+ Adicionar Consultora</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end">
+              <div class="field"><label>Nome</label><input type="text" class="fi" id="new-recep-nome" placeholder="Ex: Juliana"></div>
+              <div class="field"><label>Senha Inicial</label><input type="text" class="fi" id="new-recep-senha" placeholder="1234"></div>
+              <button class="btn btn-orange btn-sm" onclick="addRecep()">+ Adicionar</button>
+            </div>
+          </div>
+        </div>
+
         <!-- LIMPEZA DE DADOS -->
         <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:var(--r);padding:20px">
           <div style="font-size:13px;font-weight:600;margin-bottom:4px;color:var(--red);text-transform:uppercase;letter-spacing:.7px">⚠️ Limpeza de Dados</div>
@@ -643,9 +657,10 @@ const PLANO_VALORES = {
 };
 
 const MESES = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
-const RECEPS = ['NICOLE','ANDRESSA','KAREN','GEOVANNA'];
+let RECEPS = ['NICOLE','ANDRESSA','KAREN','GEOVANNA']; // dinâmico: sincronizado com o Firebase (db.ref('receps'))
 const RECEPS_IMPORT = ['NICOLE','ANDRESSA','KAREN','GEOVANNA','GEOVANNA','ANDRIELLE','STEFANIE','CAMILA','MARIANA'];
-const CORES_RECEP = ['#E84B1A','#3B82F6','#22C55E','#F59E0B'];
+const PALETA_RECEP = ['#E84B1A','#3B82F6','#22C55E','#F59E0B','#A855F7','#EC4899','#14B8A6','#EAB308','#06B6D4','#F43F5E','#84CC16','#F97316'];
+function corRecep(i){return PALETA_RECEP[i % PALETA_RECEP.length]}
 
 // ═══════════════════════════════════════
 // STATE
@@ -747,6 +762,128 @@ function listenUsers(){
     const fbUsers=snap.val();
     if(fbUsers) localStorage.setItem(SK_USERS, JSON.stringify(Object.values(fbUsers)));
   });
+}
+
+// ═══════════════════════════════════════
+// CONSULTORAS (RECEPS) — lista dinâmica
+// ═══════════════════════════════════════
+function listenReceps(){
+  db.ref('receps').on('value', snap=>{
+    const r=snap.val();
+    if(r && r.length){
+      RECEPS=r;
+    } else {
+      db.ref('receps').set(RECEPS); // primeira vez: semeia o Firebase com a lista padrão
+    }
+    renderRecepSelects();
+    const active=document.querySelector('.screen.active');
+    if(active) goTo(active.id.replace('s-',''));
+  });
+}
+function saveReceps(){ db.ref('receps').set(RECEPS); }
+
+// Repopula todos os <select> do app que listam consultoras
+function renderRecepSelects(){
+  const opts=RECEPS.map(r=>`<option>${r}</option>`).join('');
+  const optsComTodas=`<option value="">Todas recepcionistas</option>`+opts;
+  const optsComTodosAtend=`<option value="">Todos atendentes</option>`+opts;
+  ['f-recep','h-recep'].forEach(id=>{
+    const el=gid(id); if(!el)return;
+    const cur=el.value; el.innerHTML=optsComTodas;
+    if(RECEPS.includes(cur))el.value=cur;
+  });
+  const cf=gid('cf-atend');
+  if(cf){const cur=cf.value; cf.innerHTML=optsComTodosAtend; if(RECEPS.includes(cur))cf.value=cur;}
+  const cl=gid('cl-recep');
+  if(cl){const cur=cl.value; cl.innerHTML=opts; cl.value=RECEPS.includes(cur)?cur:(RECEPS[0]||'');}
+  const vr=gid('v-recep');
+  if(vr){const cur=vr.value; vr.innerHTML=opts; vr.value=RECEPS.includes(cur)?cur:(RECEPS[0]||'');}
+}
+
+function slugRecep(nome){
+  return nome.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'') // remove acentos
+    .replace(/[^a-z0-9]/g,'');
+}
+
+function addRecep(){
+  const nomeRaw=gid('new-recep-nome').value.trim();
+  const senha=gid('new-recep-senha').value.trim()||'1234';
+  if(!nomeRaw){toast('Digite o nome da consultora','err');return;}
+  const nome=nomeRaw.toUpperCase();
+  if(RECEPS.includes(nome)){toast('Já existe uma consultora com esse nome','err');return;}
+  const username=slugRecep(nomeRaw);
+  if(!username){toast('Nome inválido','err');return;}
+  const users=getUsers();
+  if(users.some(u=>u.u===username)){toast('Já existe um usuário com esse login','err');return;}
+
+  RECEPS=[...RECEPS,nome];
+  saveReceps();
+
+  // Meta padrão pra todos os meses
+  metas[nome]={};
+  MESES.forEach(m=>{metas[nome][m]={mat:60,val:17050};});
+  saveMetas();
+
+  // Usuário de login
+  users.push({u:username,p:senha,role:'recep',name:nomeRaw});
+  saveUsers(users);
+
+  gid('new-recep-nome').value='';
+  gid('new-recep-senha').value='';
+  toast(`✅ ${nomeRaw} adicionada!`,'ok');
+  renderAdmin();
+}
+
+function renameRecep(oldName){
+  const input=gid('rn-'+oldName);
+  const novoRaw=input.value.trim();
+  if(!novoRaw){toast('Digite um nome válido','err');return;}
+  const novo=novoRaw.toUpperCase();
+  if(novo===oldName){toast('Nome não mudou','err');return;}
+  if(RECEPS.includes(novo)){toast('Já existe uma consultora com esse nome','err');return;}
+
+  // 1) Lista de consultoras
+  RECEPS=RECEPS.map(r=>r===oldName?novo:r);
+  saveReceps();
+
+  // 2) Usuário de login (mantém o mesmo login, só troca o nome de exibição)
+  const users=getUsers();
+  const ui=users.findIndex(u=>u.name.toUpperCase()===oldName);
+  if(ui>-1){users[ui].name=novoRaw; saveUsers(users);}
+
+  // 3) Metas
+  if(metas[oldName]){metas[novo]=metas[oldName]; delete metas[oldName]; saveMetas();}
+
+  // 4) Vendas — renomeia em todo o histórico
+  Object.keys(vendas).forEach(mes=>{
+    (vendas[mes]||[]).forEach(v=>{if(v.recep===oldName)v.recep=novo;});
+  });
+  saveVendas();
+
+  // 5) Cancelamentos — renomeia em todo o histórico
+  Object.keys(cancelamentos).forEach(mes=>{
+    (cancelamentos[mes]||[]).forEach(c=>{if(c.atendente===oldName)c.atendente=novo;});
+  });
+  saveCancelamentos();
+
+  toast(`✅ Renomeado para ${novoRaw}! Histórico atualizado.`,'ok');
+  renderAdmin();
+}
+
+function deleteRecep(nome){
+  if(!confirm(`⚠️ Tem certeza que deseja remover ${nome}?\n\nO histórico de vendas dela será mantido, mas ela sairá da lista ativa e não poderá mais fazer login.`))return;
+
+  RECEPS=RECEPS.filter(r=>r!==nome);
+  saveReceps();
+
+  if(metas[nome]){delete metas[nome]; saveMetas();}
+
+  const users=getUsers().filter(u=>u.name.toUpperCase()!==nome);
+  saveUsers(users);
+
+  toast(`${nome} removida da lista ativa. Histórico mantido.`,'ok');
+  renderAdmin();
 }
 function loadMetas(){
   try{
@@ -896,7 +1033,7 @@ function renderDash(){
 
   // Chart recepcionistas
   const matPorRecep=RECEPS.map(r=>mats.filter(v=>v.recep===r).length);
-  renderChart('ch-rec','bar',RECEPS,matPorRecep,CORES_RECEP,'Matrículas');
+  renderChart('ch-rec','bar',RECEPS,matPorRecep,RECEPS.map((r,i)=>corRecep(i)),'Matrículas');
 
   // Chart planos
   const planosUniq=[...new Set(mats.map(v=>v.plano))];
@@ -1456,6 +1593,16 @@ function renderAdmin(){
         <button class="btn btn-orange btn-sm" onclick="saveMeta('${r}')">Salvar</button>
       </div>
     </div>`).join('');
+
+  gid('admin-receps').innerHTML=RECEPS.map(r=>`
+    <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:14px">
+      <div style="font-weight:600;margin-bottom:10px">${r}</div>
+      <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end">
+        <div class="field"><label>Renomear</label><input type="text" class="fi" id="rn-${r}" value="${r.charAt(0)+r.slice(1).toLowerCase()}"></div>
+        <button class="btn btn-orange btn-sm" onclick="renameRecep('${r}')">Salvar</button>
+        <button class="btn btn-red btn-sm" onclick="deleteRecep('${r}')">🗑️</button>
+      </div>
+    </div>`).join('')||'<div style="color:var(--mu2);font-size:12px">Nenhuma consultora cadastrada</div>';
 }
 function savePw(uname){
   const users=getUsers();
@@ -1736,10 +1883,12 @@ window.onload=function(){
 
   metas=loadMetas();
   vendas={};
+  renderRecepSelects();
   listenVendas();
   listenMetas();
   listenUsers();
   listenCancelamentos();
+  listenReceps();
 
   const sess=getSession();
   if(sess){
