@@ -1468,14 +1468,36 @@ function importFile(input){
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,dateNF:'yyyy-mm-dd'});
         if(!vendas[mesUpper])vendas[mesUpper]=[];
         const existIds=new Set(vendas[mesUpper].map(v=>v.idcli?.toString()));
+        // Mapa de colunas padrão (compatibilidade com meses antigos sem coluna CANCELAMENTO)
+        let colMap={mat:6,ren:7,ret:8,canc:null,leadsHoje:9,leadsAnt:10,obs:11};
         rows.forEach(row=>{
+          // Linha de cabeçalho de um novo bloco (recepcionista) — remapeia colunas dinamicamente
+          if(str(row[0]).toUpperCase()==='DATA'&&str(row[2]).toUpperCase()==='ORIGEM'){
+            const nm={mat:null,ren:null,ret:null,canc:null,leadsHoje:null,leadsAnt:null,obs:null};
+            for(let c=5;c<=13;c++){
+              const label=str(row[c]).toUpperCase();
+              if(!label)continue;
+              if(label.includes('MATRICULA'))nm.mat=c;
+              else if(label.includes('RENOV'))nm.ren=c;
+              else if(label.includes('RETEN'))nm.ret=c;
+              else if(label.includes('CANCEL'))nm.canc=c;
+              else if(label.includes('LEADS HOJE'))nm.leadsHoje=c;
+              else if(label.includes('LEADS ANT'))nm.leadsAnt=c;
+              else if(label.includes('OBSERVA'))nm.obs=c;
+            }
+            colMap=nm;
+            return;
+          }
           let recep=(row[1]||'').toString().toUpperCase().trim();
           // Normaliza GEOVANNA -> GEOVANNA
           if(recep==='GEOVANNA')recep='GEOVANNA';
           if(!RECEPS_IMPORT.includes(recep)&&!RECEPS.includes(recep))return;
           const dataISO=parseDateExcel(row[0]);
           const idcli=(row[4]||'').toString().trim();
-          const temVenda=((row[6]||'').toString().trim()!=='')||((row[7]||'').toString().trim()!=='')||((row[8]||'').toString().trim()!=='');
+          const cM=colMap.mat!=null&&str(row[colMap.mat])!=='';
+          const cR=colMap.ren!=null&&str(row[colMap.ren])!=='';
+          const cT=colMap.ret!=null&&str(row[colMap.ret])!=='';
+          const temVenda=cM||cR||cT;
           // Se não tem venda e não tem ID válido, usa data+recep+dia como ID único para leads
           const leadsKey = `leads_${recep}_${dataISO}`;
           const idFinal = (!idcli||idcli==='NaN'||idcli==='undefined'||idcli==='')
@@ -1495,29 +1517,30 @@ function importFile(input){
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
           if(idcli&&idcli!==''&&idcli!=='NaN'&&existIds.has(idcli)){totalIgnorado++;return;}
-          const isMat=(row[6]||'').toString().trim()!=='';
-          const isRen=(row[7]||'').toString().trim()!=='';
-          const isRet=(row[8]||'').toString().trim()!=='';
-          const leadsHojeCheck=parseInt((row[9]||'0').toString().replace(/[^0-9]/g,''))||0;
-          const leadsAntCheck=parseInt((row[10]||'0').toString().replace(/[^0-9]/g,''))||0;
+          const isMat=cM;
+          const isRen=cR;
+          const isRet=cT;
+          const isCanc=colMap.canc!=null&&str(row[colMap.canc])!=='';
+          const leadsHojeCheck=colMap.leadsHoje!=null?(parseInt((row[colMap.leadsHoje]||'0').toString().replace(/[^0-9]/g,''))||0):0;
+          const leadsAntCheck=colMap.leadsAnt!=null?(parseInt((row[colMap.leadsAnt]||'0').toString().replace(/[^0-9]/g,''))||0):0;
           const temLeads=leadsHojeCheck>0||leadsAntCheck>0;
-          // Importa se tiver venda OU leads
-          if(!isMat&&!isRen&&!isRet&&!temLeads)return;
+          // Importa se tiver venda, cancelamento OU leads
+          if(!isMat&&!isRen&&!isRet&&!isCanc&&!temLeads)return;
           // Valor: coluna 5, limpa R$, espaços e virgula
           const valorRaw=(row[5]||'0').toString().replace('R$','').replace(/\s/g,'').replace(',','.');
           const valor=parseFloat(valorRaw)||0;
           // Plano: remove espaços extras
           const plano=(row[3]||'').toString().trim().replace(/\s+/g,' ');
-          const leadsHoje=parseInt((row[9]||'0').toString().replace(/[^0-9]/g,''))||0;
-          const leadsAnt=parseInt((row[10]||'0').toString().replace(/[^0-9]/g,''))||0;
-          const obs=(row[11]||'').toString().trim();
+          const leadsHoje=leadsHojeCheck;
+          const leadsAnt=leadsAntCheck;
+          const obs=colMap.obs!=null?(row[colMap.obs]||'').toString().trim():'';
           const v={
             id:uid(),data:dataISO,recep,
             orig:(row[2]||'').toString().replace(/\.$/,'').trim(),
             plano,
             idcli:idFinal,
             valor,
-            tipo:isMat?'MAT':isRet?'RET':(isRen?'REN':'LEADS'),
+            tipo:isMat?'MAT':isRet?'RET':(isRen?'REN':(isCanc?'CANC':'LEADS')),
             leadsHoje,leadsAnt,obs,
             mes:mesUpper
           };
@@ -1717,7 +1740,8 @@ function gerarMsgDia(recep, dataISO){
   const matsDia = vmsDia.filter(v=>v.tipo==='MAT');
   const rensDia = vmsDia.filter(v=>v.tipo==='REN');
   const retsDia = vmsDia.filter(v=>v.tipo==='RET');
-  const totalValDia = vmsDia.filter(v=>v.tipo!=='LEADS').reduce((s,v)=>s+(+v.valor||0),0);
+  const cancsDia = vmsDia.filter(v=>v.tipo==='CANC');
+  const totalValDia = vmsDia.filter(v=>v.tipo!=='LEADS'&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
 
   // Meta: usa acumulado do mês
   const matsMes = vmsMes.filter(v=>v.tipo==='MAT').length;
@@ -1746,7 +1770,8 @@ function gerarMsgDia(recep, dataISO){
     `━━━━━━━━━━━━━━━━━━━━\n\n` +
     `💪 *MATRÍCULAS HOJE: ${matsDia.length}*\n${planosStr}\n\n` +
     `🔁 *RENOVAÇÕES HOJE: ${rensDia.length}*\n` +
-    `🤝 *RETENÇÕES HOJE: ${retsDia.length}*\n\n` +
+    `🤝 *RETENÇÕES HOJE: ${retsDia.length}*\n` +
+    `❌ *CANCELAMENTOS HOJE: ${cancsDia.length}*\n\n` +
     `💰 *VALOR HOJE: ${fmtVal(totalValDia)}*\n\n` +
     `🎯 *Meta do mês: ${matsMes}/${metaR} (${pct}%) — Faltam: ${faltam}*\n\n` +
     `📊 *Leads do dia:*\n  • Leads Hoje: ${leadsHoje}\n  • Leads Antigos: ${leadsAnt}\n\n` +
@@ -1795,7 +1820,8 @@ function abrirWADia(){
   const vms=getVendasMes(currentMes).filter(v=>!dataISO||v.data===dataISO);
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
-  const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
+  const cancs=vms.filter(v=>v.tipo==='CANC');
+  const totalVal=vms.filter(v=>v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const dataFmt=dataISO?fmtDate(dataISO):fmtDate(getTodayISO());
   const metaTot=RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
   const pct=metaTot>0?Math.round(mats.length/metaTot*100):0;
@@ -1803,8 +1829,9 @@ function abrirWADia(){
   const porRecep=RECEPS.map(r=>{
     const mr=vms.filter(v=>v.recep===r&&v.tipo==='MAT').length;
     const rr=vms.filter(v=>v.recep===r&&v.tipo==='REN').length;
-    const vr=vms.filter(v=>v.recep===r).reduce((s,v)=>s+(+v.valor||0),0);
-    return mr>0||rr>0?`  • ${r}: ${mr} mat. | ${rr} renov. | ${fmtVal(vr)}`:'';
+    const cr=vms.filter(v=>v.recep===r&&v.tipo==='CANC').length;
+    const vr=vms.filter(v=>v.recep===r&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
+    return mr>0||rr>0||cr>0?`  • ${r}: ${mr} mat. | ${rr} renov. | ${cr} canc. | ${fmtVal(vr)}`:'';
   }).filter(Boolean).join('\n')||'  Sem vendas';
 
   const msg=`🏋️ *PANOBIANCO — RELATÓRIO DO DIA*\n`+
@@ -1812,6 +1839,7 @@ function abrirWADia(){
     `━━━━━━━━━━━━━━━━━━━━\n\n`+
     `💪 *Total Matrículas: ${mats.length}*\n`+
     `🔁 *Total Renovações: ${rens.length}*\n`+
+    `❌ *Total Cancelamentos: ${cancs.length}*\n`+
     `💰 *Valor Total: ${fmtVal(totalVal)}*\n\n`+
     `👥 *Por Recepcionista:*\n${porRecep}\n\n`+
     `🎯 Meta do mês: ${mats.length}/${metaTot} (${pct}%)\n`+
