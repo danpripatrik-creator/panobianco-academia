@@ -601,6 +601,7 @@ tr:hover td{background:var(--s2)}
           <option value="MAT">Matrícula</option>
           <option value="REN">Renovação</option>
           <option value="RET">Retenção</option>
+          <option value="CANC">Cancelamento</option>
         </select>
       </div>
       <div class="field"><label>Mês</label>
@@ -972,6 +973,8 @@ function tagOrigem(orig){
 function tagTipo(tipo){
   if(tipo==='MAT')return`<span class="tag tag-mat">Matrícula</span>`;
   if(tipo==='RET')return`<span class="tag" style="background:rgba(168,85,247,.15);color:#c084fc">Retenção</span>`;
+  if(tipo==='CANC')return`<span class="tag" style="background:rgba(239,68,68,.15);color:var(--red)">Cancelamento</span>`;
+  if(tipo==='LEADS')return`<span class="tag" style="background:rgba(148,163,184,.15);color:var(--mu2)">Leads</span>`;
   return`<span class="tag tag-ren">Renovação</span>`;
 }
 
