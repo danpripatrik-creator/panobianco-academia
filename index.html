@@ -80,7 +80,7 @@ body{background:var(--bg);color:var(--wh);font-family:'Inter',sans-serif;font-si
 .k-sub{font-size:11px;color:var(--mu2);margin-top:3px}
 
 /* TABLE */
-.tbl-wrap{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);overflow:hidden}
+.tbl-wrap{background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);overflow-x:auto;overflow-y:hidden}
 .tbl-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 .fi{background:var(--s2);border:1px solid var(--bdr);color:var(--wh);padding:7px 11px;border-radius:7px;font-size:13px;font-family:'Inter',sans-serif;outline:none}
 .fi:focus{border-color:var(--orange)}
@@ -295,6 +295,7 @@ tr:hover td{background:var(--s2)}
             <option value="MAT">Só Matrículas</option>
             <option value="REN">Só Renovações</option>
             <option value="RET">Só Retenções</option>
+            <option value="CANC">Só Cancelamentos</option>
           </select>
           <select class="fi" id="f-orig" onchange="renderVendasTable()">
             <option value="">Todas origens</option>
