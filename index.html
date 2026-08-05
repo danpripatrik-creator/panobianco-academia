@@ -1062,8 +1062,9 @@ function renderDash(){
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const rets=vms.filter(v=>v.tipo==='RET');
-  const totalValReal=vms.filter(v=>v.tipo!=='LEADS').reduce((s,v)=>s+(+v.valor||0),0);
-  const totalVal=vms.reduce((s,v)=>s+(+v.valor||0),0);
+  const cancs=vms.filter(v=>v.tipo==='CANC');
+  const totalValReal=vms.filter(v=>v.tipo!=='LEADS'&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
+  const totalVal=vms.filter(v=>v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const totalMat=mats.length;
   const totalRen=rens.length;
   const metaTotalMat=RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
@@ -1073,6 +1074,7 @@ function renderDash(){
     <div class="kcard hi"><div class="k-lbl">Total Matrículas</div><div class="k-val" style="color:var(--ol)">${totalMat}</div><div class="k-sub">Meta: ${metaTotalMat} (${pct}%)</div></div>
     <div class="kcard ok"><div class="k-lbl">Renovações</div><div class="k-val" style="color:var(--green)">${totalRen}</div><div class="k-sub">${currentMes}</div></div>
     <div class="kcard" style="border-left:3px solid #c084fc"><div class="k-lbl">Retenções</div><div class="k-val" style="color:#c084fc">${rets.length}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard bad"><div class="k-lbl">Cancelamentos</div><div class="k-val" style="color:var(--red)">${cancs.length}</div><div class="k-sub">${currentMes}</div></div>
     <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:22px;color:var(--ol)">${fmtVal(totalVal)}</div><div class="k-sub">Mês: ${currentMes}</div></div>
     <div class="kcard ${pct>=100?'ok':'warn'}"><div class="k-lbl">% Meta Atingida</div><div class="k-val" style="color:${pct>=100?'var(--green)':'var(--yellow)'}">${pct}%</div><div class="k-sub">${totalMat}/${metaTotalMat} matrículas</div></div>
     <div class="kcard"><div class="k-lbl">Total Vendas</div><div class="k-val">${vms.length}</div><div class="k-sub">Matrículas + Renovações</div></div>`;
