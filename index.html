@@ -1308,6 +1308,7 @@ function renderMeta(){
     const matsR=mats.filter(v=>v.recep===r);
     const rensR=rens.filter(v=>v.recep===r);
     const retsR=vms.filter(v=>v.recep===r&&v.tipo==='RET');
+    const cancsR=vms.filter(v=>v.recep===r&&v.tipo==='CANC');
     const vmsR=vms.filter(v=>v.recep===r);
     const valR=vmsR.reduce((s,v)=>s+(+v.valor||0),0);
     const pctR=metaR>0?Math.min(100,Math.round(matsR.length/metaR*100)):0;
@@ -1322,6 +1323,7 @@ function renderMeta(){
       <div class="meta-stats">
         <div class="ms"><div class="ms-val" style="color:var(--green)">${rensR.length}</div><div class="ms-lbl">Renovações</div></div>
         <div class="ms"><div class="ms-val" style="color:#c084fc">${retsR.length}</div><div class="ms-lbl">Retenções</div></div>
+        <div class="ms"><div class="ms-val" style="color:var(--red)">${cancsR.length}</div><div class="ms-lbl">Cancelamentos</div></div>
         <div class="ms"><div class="ms-val" style="color:${faltam===0?'var(--green)':'var(--red)'}">${faltam}</div><div class="ms-lbl">Faltam</div></div>
         <div class="ms"><div class="ms-val">${pctR}%</div><div class="ms-lbl">% Meta</div></div>
       </div>
