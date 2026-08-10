@@ -575,13 +575,26 @@ tr:hover td{background:var(--s2)}
         </div>
 
         <div style="background:var(--s1);border:1px solid var(--bdr);border-radius:var(--r);padding:16px;margin-bottom:16px">
-          <div style="font-weight:600;font-size:13px;margin-bottom:12px">Regra de pagamento (editável)</div>
-          <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
-            <div class="field"><label>Check-ins p/ valor cheio</label><input type="number" class="fi" id="ag-r-qtd" value="10"></div>
-            <div class="field"><label>Valor cheio (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-cheio" value="109.00"></div>
-            <div class="field"><label>Valor por check-in avulso (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-avulso" value="10.09"></div>
-            <button class="btn btn-orange" onclick="agCalcular()">Calcular</button>
+          <div style="font-weight:600;font-size:13px;margin-bottom:12px">Regra de pagamento (editável por agregador)</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+            <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:12px">
+              <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--green)">Wellhub</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div class="field"><label>Check-ins p/ cheio</label><input type="number" class="fi" id="ag-r-qtd-wh" value="10"></div>
+                <div class="field"><label>Valor cheio (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-cheio-wh" value="109.00"></div>
+                <div class="field"><label>Repasse avulso (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-avulso-wh" value="11.33"></div>
+              </div>
+            </div>
+            <div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:12px">
+              <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--blue)">TotalPass</div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <div class="field"><label>Check-ins p/ cheio</label><input type="number" class="fi" id="ag-r-qtd-tp" value="10"></div>
+                <div class="field"><label>Valor cheio (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-cheio-tp" value="109.00"></div>
+                <div class="field"><label>Repasse avulso (R$)</label><input type="number" step="0.01" class="fi" id="ag-r-avulso-tp" value="11.20"></div>
+              </div>
+            </div>
           </div>
+          <button class="btn btn-orange" onclick="agCalcular()">Calcular</button>
         </div>
 
         <div id="ag-resultado" style="display:none">
@@ -1992,10 +2005,10 @@ function agHandleFile(input, tipo){
 }
 
 function agEncontraHeader(rows){
-  // Procura a linha que contém as colunas de nome (Nome ou Visitante).
-  // Formatos antigos têm a tabela na linha 1; formatos novos (ex: Wellhub 2026-07+)
-  // trazem várias linhas de texto explicativo antes da tabela real.
-  const candidatosNome = ['Nome','Visitante'];
+  // Procura a linha que contém as colunas de nome do aluno (Colaborador, Visitante ou Nome).
+  // Formatos antigos têm a tabela na linha 1; formatos novos trazem várias linhas
+  // de texto explicativo antes da tabela real.
+  const candidatosNome = ['Colaborador','Visitante','Nome'];
   for(let i=0;i<Math.min(rows.length,30);i++){
     const row = rows[i];
     if(!row) continue;
@@ -2006,24 +2019,39 @@ function agEncontraHeader(rows){
   return 0; // fallback: assume linha 1
 }
 
-function agProcessaLinhas(rows){
-  if(!rows || rows.length<2) return {counts:{},periodo:null,erro:null};
+function agParseData(v){
+  // Normaliza datas em formato dd/mm/yyyy ou yyyy-mm-dd para yyyy-mm-dd (comparável e ordenável)
+  if(!v) return null;
+  const s = String(v).trim();
+  const mBR = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if(mBR) return mBR[3]+'-'+mBR[2]+'-'+mBR[1];
+  const mISO = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(mISO) return mISO[0];
+  return s.slice(0,10);
+}
+
+function agExtraiCheckins(rows){
+  if(!rows || rows.length<2) return {checkins:[],erro:null};
   const headerIdx = agEncontraHeader(rows);
   const header = rows[headerIdx];
-  if(!header) return {counts:{},periodo:null,erro:'Não foi possível identificar o cabeçalho da planilha.'};
+  if(!header) return {checkins:[],erro:'Não foi possível identificar o cabeçalho da planilha.'};
 
-  const idxNome = header.indexOf('Nome')>=0 ? header.indexOf('Nome') : header.indexOf('Visitante');
+  // "Colaborador" (nome do aluno no formato TotalPass novo) tem prioridade sobre "Nome",
+  // pois nesse formato "Nome" é o nome da academia, não do aluno.
+  const idxNome = header.indexOf('Colaborador')>=0 ? header.indexOf('Colaborador')
+                : header.indexOf('Visitante')>=0 ? header.indexOf('Visitante')
+                : header.indexOf('Nome');
   const idxStatus = header.indexOf('Status'); // pode não existir (-1)
   const idxCheckin = header.indexOf('Check-in'); // formato antigo: data+hora juntos
-  const idxData = header.indexOf('Data'); // formato novo: data separada
-  const idxTipoCheckin = header.indexOf('Tipo de check-in'); // formato novo: 'Visita' = válido
+  const idxData = header.indexOf('Data'); // formato Wellhub novo: data separada
+  const idxValidadoEm = header.indexOf('Validado em'); // formato TotalPass novo: dd/mm/yyyy hh:mm:ss
+  const idxTipoCheckin = header.indexOf('Tipo de check-in'); // formato Wellhub novo: 'Visita' = válido
 
   if(idxNome<0){
-    return {counts:{},periodo:null,erro:'Não encontrei a coluna de aluno (Nome/Visitante) nesta planilha. Confira se é o arquivo certo.'};
+    return {checkins:[],erro:'Não encontrei a coluna de aluno (Nome/Visitante/Colaborador) nesta planilha. Confira se é o arquivo certo.'};
   }
 
-  const counts = {};
-  let minData=null, maxData=null;
+  const checkins = [];
   for(let i=headerIdx+1;i<rows.length;i++){
     const row = rows[i];
     if(!row || !row[idxNome]) continue;
@@ -2031,19 +2059,37 @@ function agProcessaLinhas(rows){
     if(idxStatus>=0 && row[idxStatus]!=='Validado') continue;
     if(idxStatus<0 && idxTipoCheckin>=0 && row[idxTipoCheckin] && row[idxTipoCheckin]!=='Visita') continue;
 
-    const nome = row[idxNome];
-    counts[nome] = (counts[nome]||0)+1;
-
     let dataStr = null;
-    if(idxCheckin>=0 && row[idxCheckin]) dataStr = String(row[idxCheckin]).slice(0,10);
-    else if(idxData>=0 && row[idxData]) dataStr = String(row[idxData]).slice(0,10);
+    if(idxCheckin>=0 && row[idxCheckin]) dataStr = agParseData(row[idxCheckin]);
+    else if(idxData>=0 && row[idxData]) dataStr = agParseData(row[idxData]);
+    else if(idxValidadoEm>=0 && row[idxValidadoEm]) dataStr = agParseData(row[idxValidadoEm]);
 
-    if(dataStr){
-      if(!minData || dataStr<minData) minData=dataStr;
-      if(!maxData || dataStr>maxData) maxData=dataStr;
+    checkins.push({nome:row[idxNome], data:dataStr});
+  }
+  return {checkins, erro:null};
+}
+
+function agAgrupaPorMes(checkins){
+  // Agrupa check-ins por mês (AAAA-MM) — importante pois algumas exportações
+  // (ex: TotalPass "Tokens") trazem vários meses misturados no mesmo arquivo.
+  const grupos = {};
+  for(const {nome,data} of checkins){
+    const mesChave = data ? data.slice(0,7) : 'sem-data';
+    if(!grupos[mesChave]) grupos[mesChave] = {counts:{}, min:data, max:data};
+    const g = grupos[mesChave];
+    g.counts[nome] = (g.counts[nome]||0)+1;
+    if(data){
+      if(!g.min || data<g.min) g.min=data;
+      if(!g.max || data>g.max) g.max=data;
     }
   }
-  return {counts, periodo: minData&&maxData ? {inicio:minData, fim:maxData} : null, erro:null};
+  return grupos;
+}
+
+function agCalculaResultado(counts, meta, cheio, avulso){
+  const entries = agEntriesFromCounts(counts, meta, cheio, avulso);
+  const total = Math.round(entries.reduce((s,e)=>s+e.valor,0)*100)/100;
+  return {total, count:entries.length, entries};
 }
 
 function agCalculaValor(qtd, meta, cheio, avulso){
@@ -2088,43 +2134,69 @@ function agCalcular(){
     toast('Importe pelo menos uma planilha primeiro!','err');
     return;
   }
-  const meta = parseFloat(gid('ag-r-qtd').value)||10;
-  const cheio = parseFloat(gid('ag-r-cheio').value)||0;
-  const avulso = parseFloat(gid('ag-r-avulso').value)||0;
+  const metaWH = parseFloat(gid('ag-r-qtd-wh').value)||10;
+  const cheioWH = parseFloat(gid('ag-r-cheio-wh').value)||0;
+  const avulsoWH = parseFloat(gid('ag-r-avulso-wh').value)||0;
+  const metaTP = parseFloat(gid('ag-r-qtd-tp').value)||10;
+  const cheioTP = parseFloat(gid('ag-r-cheio-tp').value)||0;
+  const avulsoTP = parseFloat(gid('ag-r-avulso-tp').value)||0;
 
-  const procWH = agProcessaLinhas(agRowsRaw.wh);
-  const procTP = agProcessaLinhas(agRowsRaw.tp);
+  const extWH = agExtraiCheckins(agRowsRaw.wh||[]);
+  const extTP = agExtraiCheckins(agRowsRaw.tp||[]);
+  if(extWH.erro) toast('Wellhub: '+extWH.erro,'err');
+  if(extTP.erro) toast('TotalPass: '+extTP.erro,'err');
 
-  if(procWH.erro) toast('Wellhub: '+procWH.erro,'err');
-  if(procTP.erro) toast('TotalPass: '+procTP.erro,'err');
+  const gruposWH = agAgrupaPorMes(extWH.checkins||[]);
+  const gruposTP = agAgrupaPorMes(extTP.checkins||[]);
+  const todosMeses = [...new Set([...Object.keys(gruposWH),...Object.keys(gruposTP)])]
+    .filter(m=>m!=='sem-data').sort();
 
-  const resWH = agRenderTabela('ag-tbody-wh', procWH.counts, meta, cheio, avulso);
-  const resTP = agRenderTabela('ag-tbody-tp', procTP.counts, meta, cheio, avulso);
+  if(todosMeses.length===0){
+    toast('Nenhum check-in válido encontrado nas planilhas.','err');
+    return;
+  }
 
+  let ultimoMes=null, resWH=null, resTP=null, periodo=null;
+
+  todosMeses.forEach(mesChave=>{
+    const gWH = gruposWH[mesChave] || {counts:{},min:null,max:null};
+    const gTP = gruposTP[mesChave] || {counts:{},min:null,max:null};
+    const rWH = agCalculaResultado(gWH.counts, metaWH, cheioWH, avulsoWH);
+    const rTP = agCalculaResultado(gTP.counts, metaTP, cheioTP, avulsoTP);
+    const datas = [gWH.min,gWH.max,gTP.min,gTP.max].filter(Boolean).sort();
+    const per = datas.length ? {inicio:datas[0], fim:datas[datas.length-1]} : null;
+
+    db.ref('agregadores/'+mesChave).set({
+      periodo: per,
+      regra:{wh:{meta:metaWH,cheio:cheioWH,avulso:avulsoWH}, tp:{meta:metaTP,cheio:cheioTP,avulso:avulsoTP}},
+      wellhub:{total:rWH.total, alunos:rWH.count, entries:rWH.entries},
+      totalpass:{total:rTP.total, alunos:rTP.count, entries:rTP.entries},
+      totalGeral: rWH.total+rTP.total,
+      atualizadoEm: new Date().toISOString()
+    });
+
+    ultimoMes=mesChave; resWH=rWH; resTP=rTP; periodo=per;
+  });
+
+  // Mostra na tela o mês mais recente calculado
+  agRenderTabelaEntries('ag-tbody-wh', resWH.entries, metaWH);
+  agRenderTabelaEntries('ag-tbody-tp', resTP.entries, metaTP);
   gid('ag-k-total-wh').textContent = agFmtBRL(resWH.total);
   gid('ag-k-total-tp').textContent = agFmtBRL(resTP.total);
   gid('ag-k-total-geral').textContent = agFmtBRL(resWH.total+resTP.total);
-
-  const periodo = procWH.periodo || procTP.periodo;
-  const mesChave = agMesChaveFromPeriodo(periodo);
-  gid('ag-k-periodo').textContent = periodo ? fmtDate(periodo.inicio)+' a '+fmtDate(periodo.fim) : '—';
+  gid('ag-k-periodo').textContent = periodo ? fmtDate(periodo.inicio)+' a '+fmtDate(periodo.fim) : ultimoMes;
   gid('ag-cnt-wh').textContent = resWH.count+' alunos';
   gid('ag-cnt-tp').textContent = resTP.count+' alunos';
 
   gid('ag-resultado').style.display='block';
   gid('ag-vazio').style.display='none';
 
-  if(mesChave){
-    db.ref('agregadores/'+mesChave).set({
-      periodo,
-      regra:{meta,cheio,avulso},
-      wellhub:{total:resWH.total, alunos:resWH.count, entries: agEntriesFromCounts(procWH.counts,meta,cheio,avulso)},
-      totalpass:{total:resTP.total, alunos:resTP.count, entries: agEntriesFromCounts(procTP.counts,meta,cheio,avulso)},
-      totalGeral:resWH.total+resTP.total,
-      atualizadoEm: new Date().toISOString()
-    });
-    toast('✅ Conciliação de '+mesChave+' salva!','ok');
+  if(todosMeses.length>1){
+    toast('✅ A planilha tinha '+todosMeses.length+' meses ('+todosMeses.join(', ')+') — todos foram calculados e salvos. Mostrando '+ultimoMes+'.','ok');
+  } else {
+    toast('✅ Conciliação de '+ultimoMes+' salva!','ok');
   }
+  renderAgHistorico();
 }
 
 function agRenderTabelaEntries(tbodyId, entries, meta){
@@ -2141,13 +2213,19 @@ function agRenderTabelaEntries(tbodyId, entries, meta){
 function agCarregaMes(mesChave){
   const h = agHistorico[mesChave];
   if(!h) return;
-  const meta = h.regra?.meta || 10;
-  gid('ag-r-qtd').value = meta;
-  gid('ag-r-cheio').value = h.regra?.cheio ?? 109;
-  gid('ag-r-avulso').value = h.regra?.avulso ?? 10.09;
+  // Compatibilidade: registros antigos salvos com regra única (meta/cheio/avulso plano)
+  const regraWH = h.regra?.wh || {meta:h.regra?.meta||10, cheio:h.regra?.cheio??109, avulso:h.regra?.avulso??11.33};
+  const regraTP = h.regra?.tp || {meta:h.regra?.meta||10, cheio:h.regra?.cheio??109, avulso:h.regra?.avulso??11.20};
 
-  agRenderTabelaEntries('ag-tbody-wh', h.wellhub?.entries, meta);
-  agRenderTabelaEntries('ag-tbody-tp', h.totalpass?.entries, meta);
+  gid('ag-r-qtd-wh').value = regraWH.meta;
+  gid('ag-r-cheio-wh').value = regraWH.cheio;
+  gid('ag-r-avulso-wh').value = regraWH.avulso;
+  gid('ag-r-qtd-tp').value = regraTP.meta;
+  gid('ag-r-cheio-tp').value = regraTP.cheio;
+  gid('ag-r-avulso-tp').value = regraTP.avulso;
+
+  agRenderTabelaEntries('ag-tbody-wh', h.wellhub?.entries, regraWH.meta);
+  agRenderTabelaEntries('ag-tbody-tp', h.totalpass?.entries, regraTP.meta);
 
   gid('ag-k-total-wh').textContent = agFmtBRL(h.wellhub?.total||0);
   gid('ag-k-total-tp').textContent = agFmtBRL(h.totalpass?.total||0);
