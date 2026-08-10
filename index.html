@@ -2190,9 +2190,14 @@ function agCalcular(){
       totalGeral: rWH.total+rTP.total,
       atualizadoEm: new Date().toISOString()
     };
+    // Sanitiza: remove qualquer 'undefined' aninhado (Firebase rejeita e falha silenciosamente sem isso)
+    const registroLimpo = JSON.parse(JSON.stringify(registro));
 
-    db.ref('agregadores/'+mesChave).set(registro);
-    agHistorico[mesChave] = registro; // atualização otimista local
+    db.ref('agregadores/'+mesChave).set(registroLimpo).catch(err=>{
+      toast('❌ Erro ao salvar '+mesChave+': '+err.message,'err');
+      console.error('Erro ao salvar agregadores/'+mesChave, err);
+    });
+    agHistorico[mesChave] = registroLimpo; // atualização otimista local
 
     ultimoMes=mesChave; resWH=rWH; resTP=rTP; periodo=per;
   });
