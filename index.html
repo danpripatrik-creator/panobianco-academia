@@ -1991,27 +1991,59 @@ function agHandleFile(input, tipo){
   reader.readAsArrayBuffer(f);
 }
 
-function agProcessaLinhas(rows){
-  if(!rows || rows.length<2) return {counts:{},periodo:null};
-  const header = rows[0];
-  const idxNome = header.indexOf('Nome');
-  const idxStatus = header.indexOf('Status');
-  const idxCheckin = header.indexOf('Check-in');
-  const counts = {};
-  let minData=null, maxData=null;
-  for(let i=1;i<rows.length;i++){
+function agEncontraHeader(rows){
+  // Procura a linha que contém as colunas de nome (Nome ou Visitante).
+  // Formatos antigos têm a tabela na linha 1; formatos novos (ex: Wellhub 2026-07+)
+  // trazem várias linhas de texto explicativo antes da tabela real.
+  const candidatosNome = ['Nome','Visitante'];
+  for(let i=0;i<Math.min(rows.length,30);i++){
     const row = rows[i];
-    if(!row || !row[idxNome]) continue;
-    if(idxStatus>=0 && row[idxStatus]!=='Validado') continue;
-    const nome = row[idxNome];
-    counts[nome] = (counts[nome]||0)+1;
-    if(idxCheckin>=0 && row[idxCheckin]){
-      const raw = String(row[idxCheckin]).slice(0,10);
-      if(!minData || raw<minData) minData=raw;
-      if(!maxData || raw>maxData) maxData=raw;
+    if(!row) continue;
+    for(const c of candidatosNome){
+      if(row.includes(c)) return i;
     }
   }
-  return {counts, periodo: minData&&maxData ? {inicio:minData, fim:maxData} : null};
+  return 0; // fallback: assume linha 1
+}
+
+function agProcessaLinhas(rows){
+  if(!rows || rows.length<2) return {counts:{},periodo:null,erro:null};
+  const headerIdx = agEncontraHeader(rows);
+  const header = rows[headerIdx];
+  if(!header) return {counts:{},periodo:null,erro:'Não foi possível identificar o cabeçalho da planilha.'};
+
+  const idxNome = header.indexOf('Nome')>=0 ? header.indexOf('Nome') : header.indexOf('Visitante');
+  const idxStatus = header.indexOf('Status'); // pode não existir (-1)
+  const idxCheckin = header.indexOf('Check-in'); // formato antigo: data+hora juntos
+  const idxData = header.indexOf('Data'); // formato novo: data separada
+  const idxTipoCheckin = header.indexOf('Tipo de check-in'); // formato novo: 'Visita' = válido
+
+  if(idxNome<0){
+    return {counts:{},periodo:null,erro:'Não encontrei a coluna de aluno (Nome/Visitante) nesta planilha. Confira se é o arquivo certo.'};
+  }
+
+  const counts = {};
+  let minData=null, maxData=null;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const row = rows[i];
+    if(!row || !row[idxNome]) continue;
+    // Filtro de validade: usa Status se existir; senão usa Tipo de check-in; senão aceita tudo
+    if(idxStatus>=0 && row[idxStatus]!=='Validado') continue;
+    if(idxStatus<0 && idxTipoCheckin>=0 && row[idxTipoCheckin] && row[idxTipoCheckin]!=='Visita') continue;
+
+    const nome = row[idxNome];
+    counts[nome] = (counts[nome]||0)+1;
+
+    let dataStr = null;
+    if(idxCheckin>=0 && row[idxCheckin]) dataStr = String(row[idxCheckin]).slice(0,10);
+    else if(idxData>=0 && row[idxData]) dataStr = String(row[idxData]).slice(0,10);
+
+    if(dataStr){
+      if(!minData || dataStr<minData) minData=dataStr;
+      if(!maxData || dataStr>maxData) maxData=dataStr;
+    }
+  }
+  return {counts, periodo: minData&&maxData ? {inicio:minData, fim:maxData} : null, erro:null};
 }
 
 function agCalculaValor(qtd, meta, cheio, avulso){
@@ -2056,6 +2088,9 @@ function agCalcular(){
 
   const procWH = agProcessaLinhas(agRowsRaw.wh);
   const procTP = agProcessaLinhas(agRowsRaw.tp);
+
+  if(procWH.erro) toast('Wellhub: '+procWH.erro,'err');
+  if(procTP.erro) toast('TotalPass: '+procTP.erro,'err');
 
   const resWH = agRenderTabela('ag-tbody-wh', procWH.counts, meta, cheio, avulso);
   const resTP = agRenderTabela('ag-tbody-tp', procTP.counts, meta, cheio, avulso);
