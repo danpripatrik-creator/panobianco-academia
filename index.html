@@ -2077,6 +2077,12 @@ function agMesChaveFromPeriodo(periodo){
   return ano+'-'+mes;
 }
 
+function agEntriesFromCounts(counts, meta, cheio, avulso){
+  return Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([nome,qtd])=>({nome, qtd, valor: agCalculaValor(qtd,meta,cheio,avulso)}));
+}
+
 function agCalcular(){
   if(!agRowsRaw.wh && !agRowsRaw.tp){
     toast('Importe pelo menos uma planilha primeiro!','err');
@@ -2112,13 +2118,47 @@ function agCalcular(){
     db.ref('agregadores/'+mesChave).set({
       periodo,
       regra:{meta,cheio,avulso},
-      wellhub:{total:resWH.total, alunos:resWH.count},
-      totalpass:{total:resTP.total, alunos:resTP.count},
+      wellhub:{total:resWH.total, alunos:resWH.count, entries: agEntriesFromCounts(procWH.counts,meta,cheio,avulso)},
+      totalpass:{total:resTP.total, alunos:resTP.count, entries: agEntriesFromCounts(procTP.counts,meta,cheio,avulso)},
       totalGeral:resWH.total+resTP.total,
       atualizadoEm: new Date().toISOString()
     });
     toast('✅ Conciliação de '+mesChave+' salva!','ok');
   }
+}
+
+function agRenderTabelaEntries(tbodyId, entries, meta){
+  const tbody = gid(tbodyId);
+  tbody.innerHTML='';
+  for(const {nome,qtd,valor} of (entries||[])){
+    const full = qtd>=meta;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${nome}</td><td>${qtd}</td><td><span style="padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;background:${full?'rgba(34,197,94,.15)':'rgba(245,158,11,.15)'};color:${full?'var(--green)':'var(--yellow)'}">${full?'Completo':'Parcial'}</span></td><td>${agFmtBRL(valor)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function agCarregaMes(mesChave){
+  const h = agHistorico[mesChave];
+  if(!h) return;
+  const meta = h.regra?.meta || 10;
+  gid('ag-r-qtd').value = meta;
+  gid('ag-r-cheio').value = h.regra?.cheio ?? 109;
+  gid('ag-r-avulso').value = h.regra?.avulso ?? 10.09;
+
+  agRenderTabelaEntries('ag-tbody-wh', h.wellhub?.entries, meta);
+  agRenderTabelaEntries('ag-tbody-tp', h.totalpass?.entries, meta);
+
+  gid('ag-k-total-wh').textContent = agFmtBRL(h.wellhub?.total||0);
+  gid('ag-k-total-tp').textContent = agFmtBRL(h.totalpass?.total||0);
+  gid('ag-k-total-geral').textContent = agFmtBRL(h.totalGeral||0);
+  gid('ag-k-periodo').textContent = h.periodo ? fmtDate(h.periodo.inicio)+' a '+fmtDate(h.periodo.fim) : mesChave;
+  gid('ag-cnt-wh').textContent = (h.wellhub?.alunos||0)+' alunos';
+  gid('ag-cnt-tp').textContent = (h.totalpass?.alunos||0)+' alunos';
+
+  gid('ag-resultado').style.display='block';
+  gid('ag-vazio').style.display='none';
+  toast('📂 Carregado o histórico de '+mesChave,'ok');
 }
 
 function renderAgHistorico(){
@@ -2131,7 +2171,7 @@ function renderAgHistorico(){
   }
   wrap.innerHTML = chaves.map(k=>{
     const h = agHistorico[k];
-    return `<div style="background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:150px">
+    return `<div onclick="agCarregaMes('${k}')" style="cursor:pointer;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:150px" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--bdr)'">
       <div style="font-size:12px;font-weight:600;margin-bottom:4px">${k}</div>
       <div style="font-size:11px;color:var(--mu2)">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalGeral)}</span></div>
     </div>`;
