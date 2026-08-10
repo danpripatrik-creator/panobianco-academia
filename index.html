@@ -1992,6 +1992,27 @@ db.ref('agregadores').on('value', snap=>{
   if(document.querySelector('.screen.active')?.id==='s-agregadores') renderAgHistorico();
 });
 
+function agCorrigeRangePlanilha(ws){
+  // Algumas exportações (ex: TotalPass "Tokens") declaram um alcance (!ref) menor
+  // que os dados reais — o que faz o leitor cortar a planilha antes da hora.
+  // Recalcula o alcance real varrendo as células que de fato existem.
+  let maxRow=0, maxCol=0;
+  for(const key in ws){
+    if(key[0]==='!') continue;
+    const m = key.match(/^([A-Z]+)([0-9]+)$/);
+    if(!m) continue;
+    const row = parseInt(m[2],10);
+    if(row>maxRow) maxRow=row;
+    let col=0;
+    for(const ch of m[1]) col = col*26 + (ch.charCodeAt(0)-64);
+    if(col>maxCol) maxCol=col;
+  }
+  if(maxRow>0 && maxCol>0){
+    const colLetter = XLSX.utils.encode_col(maxCol-1);
+    ws['!ref'] = 'A1:'+colLetter+maxRow;
+  }
+}
+
 function agHandleFile(input, tipo){
   const f = input.files[0];
   if(!f) return;
@@ -2001,6 +2022,7 @@ function agHandleFile(input, tipo){
   reader.onload = function(e){
     const wb = XLSX.read(e.target.result, {type:'array'});
     const ws = wb.Sheets[wb.SheetNames[0]];
+    agCorrigeRangePlanilha(ws);
     const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
     agRowsRaw[tipo] = rows;
   };
