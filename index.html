@@ -2101,6 +2101,12 @@ function agFmtBRL(v){
   return (+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 }
 
+function agSomaEntries(entries){
+  // Recalcula o total sempre a partir da lista de alunos (fonte da verdade),
+  // em vez de confiar num campo 'total' salvo que pode ter ficado desatualizado.
+  return Math.round((entries||[]).reduce((s,e)=>s+(+e.valor||0),0)*100)/100;
+}
+
 function agRenderTabela(tbodyId, counts, meta, cheio, avulso){
   const tbody = gid(tbodyId);
   tbody.innerHTML='';
@@ -2251,12 +2257,14 @@ function agCarregaMes(mesChave){
   agRenderTabelaEntries('ag-tbody-wh', h.wellhub?.entries, regraWH.meta);
   agRenderTabelaEntries('ag-tbody-tp', h.totalpass?.entries, regraTP.meta);
 
-  gid('ag-k-total-wh').textContent = agFmtBRL(h.wellhub?.total||0);
-  gid('ag-k-total-tp').textContent = agFmtBRL(h.totalpass?.total||0);
-  gid('ag-k-total-geral').textContent = agFmtBRL(h.totalGeral||0);
+  const totalWH = agSomaEntries(h.wellhub?.entries);
+  const totalTP = agSomaEntries(h.totalpass?.entries);
+  gid('ag-k-total-wh').textContent = agFmtBRL(totalWH);
+  gid('ag-k-total-tp').textContent = agFmtBRL(totalTP);
+  gid('ag-k-total-geral').textContent = agFmtBRL(totalWH+totalTP);
   gid('ag-k-periodo').textContent = h.periodo ? fmtDate(h.periodo.inicio)+' a '+fmtDate(h.periodo.fim) : mesChave;
-  gid('ag-cnt-wh').textContent = (h.wellhub?.alunos||0)+' alunos';
-  gid('ag-cnt-tp').textContent = (h.totalpass?.alunos||0)+' alunos';
+  gid('ag-cnt-wh').textContent = (h.wellhub?.entries?.length||0)+' alunos';
+  gid('ag-cnt-tp').textContent = (h.totalpass?.entries?.length||0)+' alunos';
 
   gid('ag-resultado').style.display='block';
   gid('ag-vazio').style.display='none';
@@ -2273,11 +2281,13 @@ function renderAgHistorico(){
   }
   wrap.innerHTML = chaves.map(k=>{
     const h = agHistorico[k];
+    const tWH = agSomaEntries(h.wellhub?.entries);
+    const tTP = agSomaEntries(h.totalpass?.entries);
     return `<div onclick="agCarregaMes('${k}')" style="cursor:pointer;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:190px" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--bdr)'">
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">${k}</div>
-      <div style="font-size:11px;color:var(--green);margin-bottom:2px">Wellhub: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.wellhub?.total||0)}</span></div>
-      <div style="font-size:11px;color:var(--blue);margin-bottom:6px">TotalPass: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalpass?.total||0)}</span></div>
-      <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalGeral)}</span></div>
+      <div style="font-size:11px;color:var(--green);margin-bottom:2px">Wellhub: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH)}</span></div>
+      <div style="font-size:11px;color:var(--blue);margin-bottom:6px">TotalPass: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tTP)}</span></div>
+      <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH+tTP)}</span></div>
     </div>`;
   }).join('');
 }
