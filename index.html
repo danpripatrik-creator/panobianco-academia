@@ -2268,9 +2268,11 @@ function renderAgHistorico(){
   }
   wrap.innerHTML = chaves.map(k=>{
     const h = agHistorico[k];
-    return `<div onclick="agCarregaMes('${k}')" style="cursor:pointer;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:150px" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--bdr)'">
-      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${k}</div>
-      <div style="font-size:11px;color:var(--mu2)">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalGeral)}</span></div>
+    return `<div onclick="agCarregaMes('${k}')" style="cursor:pointer;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:190px" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--bdr)'">
+      <div style="font-size:12px;font-weight:600;margin-bottom:6px">${k}</div>
+      <div style="font-size:11px;color:var(--green);margin-bottom:2px">Wellhub: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.wellhub?.total||0)}</span></div>
+      <div style="font-size:11px;color:var(--blue);margin-bottom:6px">TotalPass: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalpass?.total||0)}</span></div>
+      <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(h.totalGeral)}</span></div>
     </div>`;
   }).join('');
 }
