@@ -2159,21 +2159,40 @@ function agCalcular(){
   let ultimoMes=null, resWH=null, resTP=null, periodo=null;
 
   todosMeses.forEach(mesChave=>{
+    const existente = agHistorico[mesChave] || null;
+    const temNovoWH = !!gruposWH[mesChave];
+    const temNovoTP = !!gruposTP[mesChave];
     const gWH = gruposWH[mesChave] || {counts:{},min:null,max:null};
     const gTP = gruposTP[mesChave] || {counts:{},min:null,max:null};
-    const rWH = agCalculaResultado(gWH.counts, metaWH, cheioWH, avulsoWH);
-    const rTP = agCalculaResultado(gTP.counts, metaTP, cheioTP, avulsoTP);
-    const datas = [gWH.min,gWH.max,gTP.min,gTP.max].filter(Boolean).sort();
-    const per = datas.length ? {inicio:datas[0], fim:datas[datas.length-1]} : null;
 
-    db.ref('agregadores/'+mesChave).set({
+    // Se essa planilha não trouxe dados desse agregador para esse mês, preserva o que já
+    // estava salvo (em vez de zerar) — assim importar só Wellhub não apaga o TotalPass do mês, e vice-versa.
+    const rWH = temNovoWH
+      ? agCalculaResultado(gWH.counts, metaWH, cheioWH, avulsoWH)
+      : (existente?.wellhub ? {total:existente.wellhub.total, count:existente.wellhub.alunos, entries:existente.wellhub.entries} : {total:0,count:0,entries:[]});
+    const rTP = temNovoTP
+      ? agCalculaResultado(gTP.counts, metaTP, cheioTP, avulsoTP)
+      : (existente?.totalpass ? {total:existente.totalpass.total, count:existente.totalpass.alunos, entries:existente.totalpass.entries} : {total:0,count:0,entries:[]});
+
+    const datasNovas = [gWH.min,gWH.max,gTP.min,gTP.max].filter(Boolean);
+    const datasExistentes = existente?.periodo ? [existente.periodo.inicio, existente.periodo.fim] : [];
+    const todasDatas = [...datasNovas, ...datasExistentes].sort();
+    const per = todasDatas.length ? {inicio:todasDatas[0], fim:todasDatas[todasDatas.length-1]} : null;
+
+    const regraWHFinal = temNovoWH ? {meta:metaWH,cheio:cheioWH,avulso:avulsoWH} : (existente?.regra?.wh || {meta:metaWH,cheio:cheioWH,avulso:avulsoWH});
+    const regraTPFinal = temNovoTP ? {meta:metaTP,cheio:cheioTP,avulso:avulsoTP} : (existente?.regra?.tp || {meta:metaTP,cheio:cheioTP,avulso:avulsoTP});
+
+    const registro = {
       periodo: per,
-      regra:{wh:{meta:metaWH,cheio:cheioWH,avulso:avulsoWH}, tp:{meta:metaTP,cheio:cheioTP,avulso:avulsoTP}},
+      regra:{wh:regraWHFinal, tp:regraTPFinal},
       wellhub:{total:rWH.total, alunos:rWH.count, entries:rWH.entries},
       totalpass:{total:rTP.total, alunos:rTP.count, entries:rTP.entries},
       totalGeral: rWH.total+rTP.total,
       atualizadoEm: new Date().toISOString()
-    });
+    };
+
+    db.ref('agregadores/'+mesChave).set(registro);
+    agHistorico[mesChave] = registro; // atualização otimista local
 
     ultimoMes=mesChave; resWH=rWH; resTP=rTP; periodo=per;
   });
