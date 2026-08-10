@@ -619,7 +619,10 @@ tr:hover td{background:var(--s2)}
         <div id="ag-vazio" style="text-align:center;color:var(--mu2);font-size:13px;padding:30px">Importe as planilhas de Wellhub e TotalPass e clique em Calcular</div>
 
         <div style="margin-top:28px" id="ag-historico-wrap">
-          <div style="font-weight:600;font-size:14px;margin-bottom:8px">Histórico de meses calculados</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-weight:600;font-size:14px">Histórico de meses calculados</div>
+            <button onclick="agLimparHistorico()" style="background:transparent;border:1px solid var(--bdr);color:var(--mu2);font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer">🗑️ Limpar histórico</button>
+          </div>
           <div id="ag-historico" style="display:flex;gap:8px;flex-wrap:wrap"></div>
         </div>
       </div>
@@ -2290,6 +2293,20 @@ function renderAgHistorico(){
       <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH+tTP)}</span></div>
     </div>`;
   }).join('');
+}
+
+function agLimparHistorico(){
+  if(!confirm('Isso vai apagar TODO o histórico de conciliação de agregadores (todos os meses salvos). Essa ação não pode ser desfeita. Tem certeza?')) return;
+  if(!confirm('Confirma mesmo? Você vai precisar reimportar e recalcular todos os meses de novo.')) return;
+  db.ref('agregadores').remove().then(()=>{
+    toast('🗑️ Histórico de agregadores apagado. Reimporte as planilhas para recalcular.','ok');
+    agHistorico = {};
+    renderAgHistorico();
+    gid('ag-resultado').style.display='none';
+    gid('ag-vazio').style.display='block';
+  }).catch(err=>{
+    toast('❌ Erro ao limpar: '+err.message,'err');
+  });
 }
 
 function renderAgregadores(){
