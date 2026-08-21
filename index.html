@@ -2297,6 +2297,9 @@ function agCalculaValor(qtd, meta, cheio, avulso){
 function agFmtBRL(v){
   return (+v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 }
+function agSomaCheckins(entries){
+  return (entries||[]).reduce((s,e)=>s+(+e.qtd||0),0);
+}
 
 function agSomaEntries(entries){
   // Recalcula o total sempre a partir da lista de alunos (fonte da verdade),
@@ -2412,8 +2415,8 @@ function agCalcular(){
   gid('ag-k-total-tp').textContent = agFmtBRL(resTP.total);
   gid('ag-k-total-geral').textContent = agFmtBRL(resWH.total+resTP.total);
   gid('ag-k-periodo').textContent = periodo ? fmtDate(periodo.inicio)+' a '+fmtDate(periodo.fim) : ultimoMes;
-  gid('ag-cnt-wh').textContent = resWH.count+' alunos';
-  gid('ag-cnt-tp').textContent = resTP.count+' alunos';
+  gid('ag-cnt-wh').textContent = resWH.count+' alunos • '+agSomaCheckins(resWH.entries)+' check-ins';
+  gid('ag-cnt-tp').textContent = resTP.count+' alunos • '+agSomaCheckins(resTP.entries)+' check-ins';
 
   gid('ag-resultado').style.display='block';
   gid('ag-vazio').style.display='none';
@@ -2460,8 +2463,8 @@ function agCarregaMes(mesChave){
   gid('ag-k-total-tp').textContent = agFmtBRL(totalTP);
   gid('ag-k-total-geral').textContent = agFmtBRL(totalWH+totalTP);
   gid('ag-k-periodo').textContent = h.periodo ? fmtDate(h.periodo.inicio)+' a '+fmtDate(h.periodo.fim) : mesChave;
-  gid('ag-cnt-wh').textContent = (h.wellhub?.entries?.length||0)+' alunos';
-  gid('ag-cnt-tp').textContent = (h.totalpass?.entries?.length||0)+' alunos';
+  gid('ag-cnt-wh').textContent = (h.wellhub?.entries?.length||0)+' alunos • '+agSomaCheckins(h.wellhub?.entries)+' check-ins';
+  gid('ag-cnt-tp').textContent = (h.totalpass?.entries?.length||0)+' alunos • '+agSomaCheckins(h.totalpass?.entries)+' check-ins';
 
   gid('ag-resultado').style.display='block';
   gid('ag-vazio').style.display='none';
@@ -2480,11 +2483,13 @@ function renderAgHistorico(){
     const h = agHistorico[k];
     const tWH = agSomaEntries(h.wellhub?.entries);
     const tTP = agSomaEntries(h.totalpass?.entries);
+    const cWH = agSomaCheckins(h.wellhub?.entries);
+    const cTP = agSomaCheckins(h.totalpass?.entries);
     return `<div onclick="agCarregaMes('${k}')" style="cursor:pointer;background:var(--s2);border:1px solid var(--bdr);border-radius:8px;padding:10px 14px;min-width:190px" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--bdr)'">
       <div style="font-size:12px;font-weight:600;margin-bottom:6px">${k}</div>
-      <div style="font-size:11px;color:var(--green);margin-bottom:2px">Wellhub: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH)}</span></div>
-      <div style="font-size:11px;color:var(--blue);margin-bottom:6px">TotalPass: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tTP)}</span></div>
-      <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH+tTP)}</span></div>
+      <div style="font-size:11px;color:var(--green);margin-bottom:2px">Wellhub: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH)}</span> <span style="color:var(--mu2)">(${cWH} check-ins)</span></div>
+      <div style="font-size:11px;color:var(--blue);margin-bottom:6px">TotalPass: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tTP)}</span> <span style="color:var(--mu2)">(${cTP} check-ins)</span></div>
+      <div style="font-size:11px;color:var(--mu2);border-top:1px solid var(--bdr);padding-top:6px">Total: <span style="color:var(--wh);font-weight:600">${agFmtBRL(tWH+tTP)}</span> <span style="color:var(--mu2)">• ${cWH+cTP} check-ins</span></div>
     </div>`;
   }).join('');
 }
