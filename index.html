@@ -732,6 +732,43 @@ const PLANO_VALORES = {
   'PLATINUM MENSAL':159.9,'RENOV PLATINUM':159.9,'RENOV GOLD':139.9
 };
 
+// ═══════════════════════════════════════
+// NORMALIZAÇÃO DE PLANO E ID CLIENTE (auditoria dashboard)
+// ═══════════════════════════════════════
+// Grupos de variações de nome de plano -> nome padrão (canônico).
+// Qualquer sufixo de preço entre parênteses (ex: "(99", "(139)") é removido
+// antes da comparação, então não precisa listar aqui as versões com preço.
+const PLANO_ALIASES = [
+  { canon:'GOLD MENSAL', variants:['GOLD MENSAL'] },
+  { canon:'GOLD REC', variants:['GOLD REC','GOLD RECORRENTE','GOLD REC.'] },
+  { canon:'PLAT REC', variants:['PLAT REC','PLAT RECORRENTE','PLATINUM REC','PLATINUM RECORRENTE'] },
+  { canon:'PLAT MENSAL', variants:['PLAT MENSAL','PLATINUM MENSAL'] },
+  { canon:'ORANGE', variants:['ORANGE'] },
+  { canon:'RENOV GOLD', variants:['RENOV GOLD','RENOV. GOLD','RENOVAÇÃO GOLD'] },
+  { canon:'RENOV PLAT', variants:['RENOV PLAT','RENOV. PLAT','RENOV PLATINUM','RENOVAÇÃO PLATINUM'] },
+  { canon:'DIARIA', variants:['DIARIA','DIÁRIA'] }
+];
+function normalizarPlano(raw){
+  let p=(raw||'').toString().trim().replace(/\s+/g,' ');
+  if(!p)return p;
+  // remove sufixo de preço tipo " (99", " (139)" etc, mesmo se vier sem fechar parênteses
+  const base=p.replace(/\s*\([^)]*\)?\s*$/,'').trim();
+  const baseUpper=base.toUpperCase();
+  for(const grupo of PLANO_ALIASES){
+    if(grupo.variants.includes(baseUpper))return grupo.canon;
+  }
+  return base; // não reconhecido: mantém como veio, só sem espaços extras e sem sufixo de preço
+}
+// Normaliza ID CLIENTE para evitar que o mesmo cliente vire "IDs diferentes"
+// por causa de formatação do Excel (número vs texto, zeros à esquerda, ".0" de float)
+function normalizarID(raw){
+  let s=(raw==null?'':raw).toString().trim();
+  if(!s)return s;
+  s=s.replace(/\.0+$/,''); // "49.0" -> "49" (Excel lendo célula numérica como float)
+  if(/^\d+$/.test(s))s=s.replace(/^0+(?=\d)/,''); // "049" -> "49", só se for só dígitos
+  return s;
+}
+
 const MESES = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
 let RECEPS = ['NICOLE','ANDRESSA','KAREN','GEOVANNA']; // dinâmico: sincronizado com o Firebase (db.ref('receps'))
 let RECEPS_INATIVAS = []; // consultoras desativadas (mantidas na lista, mas sem login/lançamento novo) — db.ref('recepsInativas')
@@ -1148,7 +1185,7 @@ function renderDash(){
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const rets=vms.filter(v=>v.tipo==='RET');
-  const cancs=vms.filter(v=>v.tipo==='CANC');
+  const cancs=(cancelamentos[currentMes]||[]).filter(c=>!sessRecepDash||c.atendente===sessRecepDash);
   const totalValReal=vms.filter(v=>v.tipo!=='LEADS'&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const totalVal=vms.filter(v=>v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const totalMat=mats.length;
@@ -1396,7 +1433,7 @@ function renderMeta(){
     const matsR=mats.filter(v=>v.recep===r);
     const rensR=rens.filter(v=>v.recep===r);
     const retsR=vms.filter(v=>v.recep===r&&v.tipo==='RET');
-    const cancsR=vms.filter(v=>v.recep===r&&v.tipo==='CANC');
+    const cancsR=(cancelamentos[currentMes]||[]).filter(c=>c.atendente===r);
     const vmsR=vms.filter(v=>v.recep===r);
     const valR=vmsR.reduce((s,v)=>s+(+v.valor||0),0);
     const pctR=metaR>0?Math.min(100,Math.round(matsR.length/metaR*100)):0;
@@ -1551,13 +1588,14 @@ function importFile(input){
       lastImportBackup = JSON.parse(JSON.stringify(vendas));
       let totalImport=0;
       let totalIgnorado=0;
+      let totalAtualizado=0;
       wb.SheetNames.forEach(sheetName=>{
         const mesUpper=sheetName.toUpperCase().trim();
         if(!MESES.includes(mesUpper))return;
         const ws=wb.Sheets[sheetName];
         const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,dateNF:'yyyy-mm-dd'});
         if(!vendas[mesUpper])vendas[mesUpper]=[];
-        const existIds=new Set(vendas[mesUpper].map(v=>v.idcli?.toString()));
+        const existIds=new Set(vendas[mesUpper].map(v=>normalizarID(v.idcli)));
         // Mapa de colunas padrão (compatibilidade com meses antigos sem coluna CANCELAMENTO)
         let colMap={mat:6,ren:7,ret:8,canc:null,leadsHoje:9,leadsAnt:10,obs:11};
         rows.forEach(row=>{
@@ -1583,7 +1621,7 @@ function importFile(input){
           if(recep==='GEOVANNA')recep='GEOVANNA';
           if(!RECEPS_IMPORT.includes(recep)&&!RECEPS.includes(recep))return;
           const dataISO=parseDateExcel(row[0]);
-          const idcli=(row[4]||'').toString().trim();
+          const idcli=normalizarID(row[4]);
           const cM=colMap.mat!=null&&str(row[colMap.mat])!=='';
           const cR=colMap.ren!=null&&str(row[colMap.ren])!=='';
           const cT=colMap.ret!=null&&str(row[colMap.ret])!=='';
@@ -1594,19 +1632,23 @@ function importFile(input){
             ? (temVenda ? null : leadsKey)
             : idcli;
           if(!idFinal)return;
-          // Linhas de leads sempre substituem (remove antigo se existir)
-          if(existIds.has(idFinal)){
-            if(idFinal.startsWith('leads_')){
-              // Remove linha de leads antiga e adiciona nova atualizada
-              vendas[mesUpper]=(vendas[mesUpper]||[]).filter(v=>v.idcli!==idFinal);
+          // Registro que será atualizado no lugar (em vez de duplicado), se for o caso
+          let vendaExistente=null;
+          if(idFinal.startsWith('leads_')){
+            // Linhas de leads sempre substituem (remove antiga e adiciona nova atualizada)
+            if(existIds.has(idFinal)){
+              vendas[mesUpper]=(vendas[mesUpper]||[]).filter(v=>normalizarID(v.idcli)!==idFinal);
               existIds.delete(idFinal);
-            } else {
-              totalIgnorado++;return;
             }
+          } else if(existIds.has(idFinal)){
+            // Mesmo ID CLIENTE já existe neste mês. Se for a MESMA DATA, é a mesma
+            // linha sendo reimportada/corrigida -> atualiza o registro existente.
+            // Se for data DIFERENTE, é uma segunda venda legítima do mesmo cliente
+            // -> preserva as duas (não apaga, não ignora).
+            vendaExistente = (vendas[mesUpper]||[]).find(v=>normalizarID(v.idcli)===idFinal && v.data===dataISO);
           }
           // FILTRO: só importa o dia escolhido (ou tudo se modo=mes)
           if(targetDate && dataISO!==targetDate){totalIgnorado++;return;}
-          if(idcli&&idcli!==''&&idcli!=='NaN'&&existIds.has(idcli)){totalIgnorado++;return;}
           const isMat=cM;
           const isRen=cR;
           const isRet=cT;
@@ -1619,23 +1661,37 @@ function importFile(input){
           // Valor: coluna 5, limpa R$, espaços e virgula
           const valorRaw=(row[5]||'0').toString().replace('R$','').replace(/\s/g,'').replace(',','.');
           const valor=parseFloat(valorRaw)||0;
-          // Plano: remove espaços extras
-          const plano=(row[3]||'').toString().trim().replace(/\s+/g,' ');
+          // Plano: normaliza variações de nome (ex: "PLATINUM RECORRENTE", "PLAT REC (139)" -> "PLAT REC")
+          const plano=normalizarPlano(row[3]);
           const leadsHoje=leadsHojeCheck;
           const leadsAnt=leadsAntCheck;
           const obs=colMap.obs!=null?(row[colMap.obs]||'').toString().trim():'';
+          const tipo=isMat?'MAT':isRet?'RET':(isRen?'REN':(isCanc?'CANC':'LEADS'));
+          if(vendaExistente){
+            // Atualiza o registro existente (mesmo ID + mesma data) em vez de duplicar
+            vendaExistente.recep=recep;
+            vendaExistente.orig=(row[2]||'').toString().replace(/\.$/,'').trim();
+            vendaExistente.plano=plano;
+            vendaExistente.valor=valor;
+            vendaExistente.tipo=tipo;
+            vendaExistente.leadsHoje=leadsHoje;
+            vendaExistente.leadsAnt=leadsAnt;
+            vendaExistente.obs=obs;
+            totalAtualizado++;
+            return;
+          }
           const v={
             id:uid(),data:dataISO,recep,
             orig:(row[2]||'').toString().replace(/\.$/,'').trim(),
             plano,
             idcli:idFinal,
             valor,
-            tipo:isMat?'MAT':isRet?'RET':(isRen?'REN':(isCanc?'CANC':'LEADS')),
+            tipo,
             leadsHoje,leadsAnt,obs,
             mes:mesUpper
           };
           vendas[mesUpper].push(v);
-          existIds.add(idcli);
+          existIds.add(idFinal);
           totalImport++;
         });
       });
@@ -1687,7 +1743,8 @@ function importFile(input){
           <div style="color:var(--green);font-weight:700;font-size:15px;margin-bottom:6px">✅ Importação concluída!</div>
           <div style="font-size:13px;color:var(--mu2)">📅 Período: <strong style="color:var(--wh)">${dataFmt}</strong></div>
           <div style="font-size:13px;color:var(--mu2)">💪 Vendas adicionadas: <strong style="color:var(--green)">${totalImport}</strong></div>
-          <div style="font-size:13px;color:var(--mu2)">⏭️ Ignoradas (duplicatas): <strong>${totalIgnorado}</strong></div>
+          <div style="font-size:13px;color:var(--mu2)">🔄 Registros atualizados (mesmo ID + mesma data): <strong style="color:#60a5fa">${totalAtualizado}</strong></div>
+          <div style="font-size:13px;color:var(--mu2)">⏭️ Ignoradas (fora do dia selecionado): <strong>${totalIgnorado}</strong></div>
         </div>`;
       toast(`✅ ${totalImport} vendas importadas!`,'ok');
     }catch(err){
@@ -1830,7 +1887,7 @@ function gerarMsgDia(recep, dataISO){
   const matsDia = vmsDia.filter(v=>v.tipo==='MAT');
   const rensDia = vmsDia.filter(v=>v.tipo==='REN');
   const retsDia = vmsDia.filter(v=>v.tipo==='RET');
-  const cancsDia = vmsDia.filter(v=>v.tipo==='CANC');
+  const cancsDia = (cancelamentos[currentMes]||[]).filter(c=>c.atendente===recep && c.data===todayISO);
   const totalValDia = vmsDia.filter(v=>v.tipo!=='LEADS'&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
 
   // Meta: usa acumulado do mês
@@ -1910,7 +1967,7 @@ function abrirWADia(){
   const vms=getVendasMes(currentMes).filter(v=>!dataISO||v.data===dataISO);
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
-  const cancs=vms.filter(v=>v.tipo==='CANC');
+  const cancs=(cancelamentos[currentMes]||[]).filter(c=>!dataISO||c.data===dataISO);
   const totalVal=vms.filter(v=>v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const dataFmt=dataISO?fmtDate(dataISO):fmtDate(getTodayISO());
   const metaTot=RECEPS.reduce((s,r)=>s+(metas[r]?.[currentMes]?.mat||60),0);
@@ -1919,7 +1976,7 @@ function abrirWADia(){
   const porRecep=RECEPS.map(r=>{
     const mr=vms.filter(v=>v.recep===r&&v.tipo==='MAT').length;
     const rr=vms.filter(v=>v.recep===r&&v.tipo==='REN').length;
-    const cr=vms.filter(v=>v.recep===r&&v.tipo==='CANC').length;
+    const cr=(cancelamentos[currentMes]||[]).filter(c=>c.atendente===r&&(!dataISO||c.data===dataISO)).length;
     const vr=vms.filter(v=>v.recep===r&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
     return mr>0||rr>0||cr>0?`  • ${r}: ${mr} mat. | ${rr} renov. | ${cr} canc. | ${fmtVal(vr)}`:'';
   }).filter(Boolean).join('\n')||'  Sem vendas';
