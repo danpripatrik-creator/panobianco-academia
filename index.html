@@ -2186,6 +2186,25 @@ function agParseData(v){
   return s.slice(0,10);
 }
 
+// Tenta achar o mês/ano do relatório a partir do texto de título nas primeiras linhas
+// (usado pelo formato Wellhub "agregado", que não tem data por linha — ex: título
+// "Veja todos os check-ins que você teve em ago. 2026 .")
+function agExtraiMesTitulo(rows){
+  const MESES_ABR={'JAN':'01','FEV':'02','MAR':'03','ABR':'04','MAI':'05','JUN':'06','JUL':'07','AGO':'08','SET':'09','OUT':'10','NOV':'11','DEZ':'12'};
+  for(let i=0;i<Math.min(rows.length,10);i++){
+    const row=rows[i];
+    if(!row)continue;
+    const texto=row.filter(c=>c!=null).join(' ');
+    if(!texto)continue;
+    const m=texto.match(/([A-Za-zçÇ]{3,})\.?\s+(\d{4})/);
+    if(m){
+      const abr=m[1].slice(0,3).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(MESES_ABR[abr])return`${m[2]}-${MESES_ABR[abr]}`;
+    }
+  }
+  return null;
+}
+
 function agExtraiCheckins(rows){
   if(!rows || rows.length<2) return {checkins:[],erro:null};
   const headerIdx = agEncontraHeader(rows);
@@ -2197,15 +2216,37 @@ function agExtraiCheckins(rows){
   const idxNome = header.indexOf('Colaborador')>=0 ? header.indexOf('Colaborador')
                 : header.indexOf('Visitante')>=0 ? header.indexOf('Visitante')
                 : header.indexOf('Nome');
+
+  if(idxNome<0){
+    return {checkins:[],erro:'Não encontrei a coluna de aluno (Nome/Visitante/Colaborador) nesta planilha. Confira se é o arquivo certo.'};
+  }
+
+  // Formato Wellhub "agregado por aluno" (novo, ~2026-08 em diante): já vem com o total
+  // de check-ins pronto por aluno, em vez de uma linha por check-in. Detecta pela coluna
+  // "Total de check-ins" e expande para o mesmo formato {nome,data} que o resto do
+  // código já sabe processar, sem precisar mexer no cálculo de valores.
+  const idxTotalAgg = header.findIndex(h=>h && String(h).toLowerCase().includes('total de check-ins'));
+  if(idxTotalAgg>=0){
+    const mesChave = agExtraiMesTitulo(rows);
+    if(!mesChave){
+      return {checkins:[], erro:'Esse relatório já vem agregado por aluno ("Total de check-ins"), mas não consegui identificar o mês pelo título da planilha (ex: "...em ago. 2026"). Confira se o título da planilha não foi alterado.'};
+    }
+    const dataSintetica = mesChave+'-01';
+    const checkins=[];
+    for(let i=headerIdx+1;i<rows.length;i++){
+      const row=rows[i];
+      if(!row || !row[idxNome])continue;
+      const total=Number(row[idxTotalAgg])||0;
+      for(let k=0;k<total;k++)checkins.push({nome:row[idxNome],data:dataSintetica});
+    }
+    return {checkins, erro:null};
+  }
+
   const idxStatus = header.indexOf('Status'); // pode não existir (-1)
   const idxCheckin = header.indexOf('Check-in'); // formato antigo: data+hora juntos
   const idxData = header.indexOf('Data'); // formato Wellhub novo: data separada
   const idxValidadoEm = header.indexOf('Validado em'); // formato TotalPass novo: dd/mm/yyyy hh:mm:ss
   const idxTipoCheckin = header.indexOf('Tipo de check-in'); // formato Wellhub novo: 'Visita' = válido
-
-  if(idxNome<0){
-    return {checkins:[],erro:'Não encontrei a coluna de aluno (Nome/Visitante/Colaborador) nesta planilha. Confira se é o arquivo certo.'};
-  }
 
   const checkins = [];
   for(let i=headerIdx+1;i<rows.length;i++){
