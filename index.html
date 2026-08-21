@@ -1562,9 +1562,16 @@ function parseDateExcel(rawDate){
     }catch{}
   }
 
-  // dd/mm/yyyy
+  // dd/mm/yyyy (tolera erro de digitação: barra faltando ou duplicada, ex: "17/082026" ou "16//082026")
   if(s.includes('/')){
-    const p=s.split('/');
+    const digits=s.replace(/[^\d]/g,'');
+    if(digits.length===8){
+      const dd=digits.slice(0,2),mm=digits.slice(2,4),yyyy=digits.slice(4,8);
+      if(Number(mm)>=1&&Number(mm)<=12&&Number(dd)>=1&&Number(dd)<=31&&Number(yyyy)>2000){
+        return`${yyyy}-${mm}-${dd}`;
+      }
+    }
+    const p=s.split('/').filter(x=>x!=='');
     if(p.length===3){
       const y=p[2].length===4?p[2]:'20'+p[2];
       return`${y}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
@@ -1705,29 +1712,46 @@ function importFile(input){
         const ws=wb.Sheets[sheetName];
         const rowsCanc=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,dateNF:'yyyy-mm-dd'});
         if(!cancelamentos[mesCanc])cancelamentos[mesCanc]=[];
-        const existCancIds=new Set(cancelamentos[mesCanc].map(v=>v.idcli?.toString()));
+        const existCancIds=new Set(cancelamentos[mesCanc].map(v=>normalizarID(v.idcli)));
+        // Mapeamento de colunas da aba CANC, detectado a partir do cabeçalho real
+        // (o layout muda de mês pra mês: às vezes tem coluna de E-MAIL, às vezes não,
+        // às vezes tem TERMO ASSINADO, às vezes não — mas ID e MOTIVO sempre existem
+        // como colunas nomeadas assim). Detectar 1x por aba evita ler a coluna errada
+        // nas linhas que não têm certos campos preenchidos.
+        let cancColMap=null;
         rowsCanc.forEach(function(row){
-          // Detecta formato da aba (colunas variam por mês)
           var r0=str(row[0]);
-          if(!r0||r0.includes('CANCEL')||r0.includes('DATA')||r0.includes('Vocês'))return;
-          var dataISOcanc=parseDateExcel(row[0]);
-          if(!dataISOcanc)return;
-          // Tenta detectar colunas de ID (pode ser col 3, 4 ou 5)
-          var idcli='',motivo='',atendente='',contato='',dataCanc='',termoEnv='',termoAss='';
-          // Formato JUNHO: DATA|LIB|ENVIADO_POR|EMAIL|ASSINADO|ID|MOTIVO|ATENDENTE|CONTATO|OBS
-          // Formato anterior: DATA|LIB|ENVIADO|ASSINADO|ID|MOTIVO|ATENDENTE|CONTATO|OBS
-          var hasEmail=typeof row[3]==='string'&&(row[3]||'').toString().includes('panobianco');
-          if(hasEmail){
-            idcli=str(row[5]);motivo=str(row[6]);atendente=str(row[7]).toUpperCase();contato=str(row[8]);
-            termoEnv=str(row[2]);termoAss=str(row[4]);dataCanc=parseDateExcel(row[9])||str(row[9]);
-          } else if(str(row[2]).length>2&&!['SIM','NÃO','NAO'].includes(str(row[2]).toUpperCase())){
-            idcli=str(row[4]);motivo=str(row[5]);atendente=str(row[6]).toUpperCase();contato=str(row[7]);
-            termoEnv=str(row[2]);termoAss=str(row[3]);dataCanc=parseDateExcel(row[8])||str(row[8]);
-          } else {
-            idcli=str(row[3]);motivo=str(row[4]);atendente=str(row[5]).toUpperCase();contato=str(row[6]);
-            termoEnv=str(row[1]);termoAss='';dataCanc=parseDateExcel(row[7])||str(row[7]);
+          const upperCells=row.map(c=>str(c).toUpperCase().trim());
+          // Linha de cabeçalho da aba: tem "ID" e uma coluna com "MOTIVO"
+          if(upperCells.includes('ID')&&upperCells.some(c=>c.includes('MOTIVO'))){
+            const nm={data:0,env:null,email:null,ass:null,id:null,motivo:null,atendente:null,contato:null,obs:null};
+            upperCells.forEach((label,idx)=>{
+              if(!label)return;
+              if(label==='ID')nm.id=idx;
+              else if(label.includes('MOTIVO'))nm.motivo=idx;
+              else if(label.includes('ATENDENTE'))nm.atendente=idx;
+              else if(label.includes('CONTATO'))nm.contato=idx;
+              else if(label.includes('ASSINADO'))nm.ass=idx;
+              else if(label.includes('ENVIADO'))nm.env=idx;
+              else if(label.includes('E-MAIL')||label.includes('EMAIL'))nm.email=idx;
+              else if(label.includes('OBSERVA')||label.includes('FEEDBACK')||label.includes('DATA CANCEL'))nm.obs=idx;
+            });
+            cancColMap=nm;
+            return;
           }
-          if(!idcli||idcli==='nan'||idcli==='NaN'||existCancIds.has(idcli))return;
+          if(!r0||r0.includes('CANCEL')||r0.includes('Vocês'))return;
+          if(!cancColMap)return; // ainda não achou o cabeçalho desta aba: ignora a linha por segurança
+          var dataISOcanc=parseDateExcel(row[cancColMap.data]);
+          if(!dataISOcanc)return;
+          var idcli=cancColMap.id!=null?normalizarID(row[cancColMap.id]):'';
+          var motivo=cancColMap.motivo!=null?str(row[cancColMap.motivo]):'';
+          var atendente=cancColMap.atendente!=null?str(row[cancColMap.atendente]).toUpperCase():'';
+          var contato=cancColMap.contato!=null?str(row[cancColMap.contato]):'';
+          var termoEnv=cancColMap.env!=null?str(row[cancColMap.env]):'';
+          var termoAss=cancColMap.ass!=null?str(row[cancColMap.ass]):'';
+          var dataCancRaw=cancColMap.obs!=null?row[cancColMap.obs]:'';
+          var dataCanc=parseDateExcel(dataCancRaw)||str(dataCancRaw);
+          if(!idcli||idcli==='nan'||idcli==='NaN'||idcli==='undefined'||existCancIds.has(idcli))return;
           // Filtra por data se modo dia
           if(targetDate&&dataISOcanc!==targetDate)return;
           cancelamentos[mesCanc].push({id:uid(),data:dataISOcanc,idcli,motivo,atendente,contato,termoEnv,termoAss,dataCanc,mes:mesCanc});
