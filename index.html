@@ -381,6 +381,12 @@ tr:hover td{background:var(--s2)}
             <option value="">Todos atendentes</option>
             <option>NICOLE</option><option>ANDRESSA</option><option>KAREN</option><option>GEOVANNA</option>
           </select>
+          <select class="fi" id="cf-status" onchange="renderCanc()">
+            <option value="">Todos status</option>
+            <option value="aguardando">Aguardando</option>
+            <option value="liberado">Liberados para Termo</option>
+            <option value="concluido">Concluídos</option>
+          </select>
           <input type="date" class="fi" id="cf-data" onchange="renderCanc()" title="Filtrar por data">
           <button class="btn btn-ghost btn-sm" onclick="gid('cf-data').value=getTodayISO();renderCanc()">📅 Hoje</button>
           <button class="btn btn-ghost btn-sm" onclick="gid('cf-data').value='';renderCanc()">✕ Data</button>
@@ -390,8 +396,8 @@ tr:hover td{background:var(--s2)}
             <thead>
               <tr>
                 <th>Data Atend.</th><th>ID Cliente</th><th>Motivo</th>
-                <th>Atendente</th><th>Contato</th><th>Termo Enviado</th>
-                <th>Termo Assinado</th><th>Data Cancelamento</th>
+                <th>Atendente</th><th>Contato</th><th>Liberado p/ Termo</th>
+                <th>Termo Assinado</th><th>Status</th><th>Data Cancelamento</th>
               </tr>
             </thead>
             <tbody id="canc-tbody"></tbody>
@@ -767,6 +773,17 @@ function normalizarID(raw){
   s=s.replace(/\.0+$/,''); // "49.0" -> "49" (Excel lendo célula numérica como float)
   if(/^\d+$/.test(s))s=s.replace(/^0+(?=\d)/,''); // "049" -> "49", só se for só dígitos
   return s;
+}
+// Etapas do processo de cancelamento (planilha CANC [MÊS]): uma solicitação de
+// cancelamento NÃO é o mesmo que um cancelamento concluído — o aluno pode ser
+// revertido/retido entre a solicitação e a assinatura do termo.
+function normalizaFlagSN(v){return (v||'').toString().trim().toUpperCase();}
+function cancIsLiberado(c){return normalizaFlagSN(c.liberado)==='SIM';}
+function cancIsConcluido(c){return normalizaFlagSN(c.termoAss)==='SIM';}
+function statusCancelamento(c){
+  if(cancIsConcluido(c))return'concluido';
+  if(cancIsLiberado(c))return'liberado';
+  return'aguardando';
 }
 
 const MESES = ['JANEIRO','FEVEREIRO','MARÇO','ABRIL','MAIO','JUNHO','JULHO','AGOSTO','SETEMBRO','OUTUBRO','NOVEMBRO','DEZEMBRO'];
@@ -1185,7 +1202,8 @@ function renderDash(){
   const mats=vms.filter(v=>v.tipo==='MAT');
   const rens=vms.filter(v=>v.tipo==='REN');
   const rets=vms.filter(v=>v.tipo==='RET');
-  const cancs=(cancelamentos[currentMes]||[]).filter(c=>!sessRecepDash||c.atendente===sessRecepDash);
+  const cancsMes=(cancelamentos[currentMes]||[]).filter(c=>!sessRecepDash||c.atendente===sessRecepDash);
+  const cancsConcluidos=cancsMes.filter(cancIsConcluido);
   const totalValReal=vms.filter(v=>v.tipo!=='LEADS'&&v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const totalVal=vms.filter(v=>v.tipo!=='CANC').reduce((s,v)=>s+(+v.valor||0),0);
   const totalMat=mats.length;
@@ -1197,7 +1215,8 @@ function renderDash(){
     <div class="kcard hi"><div class="k-lbl">Total Matrículas</div><div class="k-val" style="color:var(--ol)">${totalMat}</div><div class="k-sub">Meta: ${metaTotalMat} (${pct}%)</div></div>
     <div class="kcard ok"><div class="k-lbl">Renovações</div><div class="k-val" style="color:var(--green)">${totalRen}</div><div class="k-sub">${currentMes}</div></div>
     <div class="kcard" style="border-left:3px solid #c084fc"><div class="k-lbl">Retenções</div><div class="k-val" style="color:#c084fc">${rets.length}</div><div class="k-sub">${currentMes}</div></div>
-    <div class="kcard bad"><div class="k-lbl">Cancelamentos</div><div class="k-val" style="color:var(--red)">${cancs.length}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard bad"><div class="k-lbl">Solicitações de Cancelamento</div><div class="k-val" style="color:var(--red)">${cancsMes.length}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard bad"><div class="k-lbl">Cancelamentos Concluídos</div><div class="k-val" style="color:var(--red)">${cancsConcluidos.length}</div><div class="k-sub">Termo assinado • ${currentMes}</div></div>
     <div class="kcard hi"><div class="k-lbl">Valor Total</div><div class="k-val" style="font-size:22px;color:var(--ol)">${fmtVal(totalVal)}</div><div class="k-sub">Mês: ${currentMes}</div></div>
     <div class="kcard ${pct>=100?'ok':'warn'}"><div class="k-lbl">% Meta Atingida</div><div class="k-val" style="color:${pct>=100?'var(--green)':'var(--yellow)'}">${pct}%</div><div class="k-sub">${totalMat}/${metaTotalMat} matrículas</div></div>
     <div class="kcard"><div class="k-lbl">Total Vendas</div><div class="k-val">${vms.length}</div><div class="k-sub">Matrículas + Renovações</div></div>`;
@@ -1596,6 +1615,8 @@ function importFile(input){
       let totalImport=0;
       let totalIgnorado=0;
       let totalAtualizado=0;
+      let totalCancImport=0;
+      let totalCancAtualizado=0;
       wb.SheetNames.forEach(sheetName=>{
         const mesUpper=sheetName.toUpperCase().trim();
         if(!MESES.includes(mesUpper))return;
@@ -1712,7 +1733,6 @@ function importFile(input){
         const ws=wb.Sheets[sheetName];
         const rowsCanc=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,dateNF:'yyyy-mm-dd'});
         if(!cancelamentos[mesCanc])cancelamentos[mesCanc]=[];
-        const existCancIds=new Set(cancelamentos[mesCanc].map(v=>normalizarID(v.idcli)));
         // Mapeamento de colunas da aba CANC, detectado a partir do cabeçalho real
         // (o layout muda de mês pra mês: às vezes tem coluna de E-MAIL, às vezes não,
         // às vezes tem TERMO ASSINADO, às vezes não — mas ID e MOTIVO sempre existem
@@ -1724,13 +1744,14 @@ function importFile(input){
           const upperCells=row.map(c=>str(c).toUpperCase().trim());
           // Linha de cabeçalho da aba: tem "ID" e uma coluna com "MOTIVO"
           if(upperCells.includes('ID')&&upperCells.some(c=>c.includes('MOTIVO'))){
-            const nm={data:0,env:null,email:null,ass:null,id:null,motivo:null,atendente:null,contato:null,obs:null};
+            const nm={data:0,lib:null,env:null,email:null,ass:null,id:null,motivo:null,atendente:null,contato:null,obs:null};
             upperCells.forEach((label,idx)=>{
               if(!label)return;
               if(label==='ID')nm.id=idx;
               else if(label.includes('MOTIVO'))nm.motivo=idx;
               else if(label.includes('ATENDENTE'))nm.atendente=idx;
               else if(label.includes('CONTATO'))nm.contato=idx;
+              else if(label.includes('LIBERADO'))nm.lib=idx;
               else if(label.includes('ASSINADO'))nm.ass=idx;
               else if(label.includes('ENVIADO'))nm.env=idx;
               else if(label.includes('E-MAIL')||label.includes('EMAIL'))nm.email=idx;
@@ -1749,13 +1770,30 @@ function importFile(input){
           var contato=cancColMap.contato!=null?str(row[cancColMap.contato]):'';
           var termoEnv=cancColMap.env!=null?str(row[cancColMap.env]):'';
           var termoAss=cancColMap.ass!=null?str(row[cancColMap.ass]):'';
+          var liberado=cancColMap.lib!=null?str(row[cancColMap.lib]):'';
           var dataCancRaw=cancColMap.obs!=null?row[cancColMap.obs]:'';
           var dataCanc=parseDateExcel(dataCancRaw)||str(dataCancRaw);
-          if(!idcli||idcli==='nan'||idcli==='NaN'||idcli==='undefined'||existCancIds.has(idcli))return;
+          if(!idcli||idcli==='nan'||idcli==='NaN'||idcli==='undefined')return;
           // Filtra por data se modo dia
           if(targetDate&&dataISOcanc!==targetDate)return;
-          cancelamentos[mesCanc].push({id:uid(),data:dataISOcanc,idcli,motivo,atendente,contato,termoEnv,termoAss,dataCanc,mes:mesCanc});
-          existCancIds.add(idcli);
+          // Atualiza o registro existente (mesmo ID no mesmo mês) em vez de duplicar —
+          // assim, ao reimportar o mesmo mês depois que o processo avançou (liberou o
+          // termo, assinou etc.), o status é atualizado em vez de ficar duplicado ou preso no valor antigo
+          const cancExistente=(cancelamentos[mesCanc]||[]).find(c=>normalizarID(c.idcli)===idcli);
+          if(cancExistente){
+            cancExistente.data=dataISOcanc;
+            cancExistente.motivo=motivo;
+            cancExistente.atendente=atendente;
+            cancExistente.contato=contato;
+            cancExistente.termoEnv=termoEnv;
+            cancExistente.termoAss=termoAss;
+            cancExistente.liberado=liberado;
+            cancExistente.dataCanc=dataCanc;
+            totalCancAtualizado++;
+            return;
+          }
+          cancelamentos[mesCanc].push({id:uid(),data:dataISOcanc,idcli,motivo,atendente,contato,termoEnv,termoAss,liberado,dataCanc,mes:mesCanc});
+          totalCancImport++;
         });
       });
       saveCancelamentos();
@@ -1769,6 +1807,7 @@ function importFile(input){
           <div style="font-size:13px;color:var(--mu2)">💪 Vendas adicionadas: <strong style="color:var(--green)">${totalImport}</strong></div>
           <div style="font-size:13px;color:var(--mu2)">🔄 Registros atualizados (mesmo ID + mesma data): <strong style="color:#60a5fa">${totalAtualizado}</strong></div>
           <div style="font-size:13px;color:var(--mu2)">⏭️ Ignoradas (fora do dia selecionado): <strong>${totalIgnorado}</strong></div>
+          <div style="font-size:13px;color:var(--mu2)">❌ Cancelamentos novos: <strong style="color:var(--red)">${totalCancImport}</strong> | atualizados: <strong style="color:#60a5fa">${totalCancAtualizado}</strong></div>
         </div>`;
       toast(`✅ ${totalImport} vendas importadas!`,'ok');
     }catch(err){
@@ -2431,22 +2470,25 @@ function renderCanc(){
   const list=(cancelamentos[currentMes]||[]);
   const fAtend=gid('cf-atend')?.value||'';
   const fData=gid('cf-data')?.value||'';
+  const fStatus=gid('cf-status')?.value||'';
   const sess=getSession();
   let filtered=[...list];
   if(sess?.role==='recep')filtered=filtered.filter(v=>v.atendente===sess.name.toUpperCase());
   if(fAtend)filtered=filtered.filter(v=>v.atendente===fAtend);
   if(fData)filtered=filtered.filter(v=>v.data===fData);
+  if(fStatus)filtered=filtered.filter(v=>statusCancelamento(v)===fStatus);
   filtered.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
-  // KPIs
-  const total=list.length;
-  const termoEnv=list.filter(v=>v.termoEnv&&v.termoEnv.length>1).length;
-  const termoAss=list.filter(v=>v.termoAss==='SIM').length;
+  // KPIs — etapas do processo (solicitação ≠ cancelamento concluído; o aluno pode ser retido no meio do caminho)
+  const solicitacoes=list.length;
+  const liberados=list.filter(cancIsLiberado).length;
+  const concluidos=list.filter(cancIsConcluido).length;
+  const aguardando=solicitacoes-liberados;
   gid('canc-kpis').innerHTML=`
-    <div class="kcard bad"><div class="k-lbl">Total Cancelamentos</div><div class="k-val" style="color:var(--red)">${total}</div><div class="k-sub">${currentMes}</div></div>
-    <div class="kcard warn"><div class="k-lbl">Termos Enviados</div><div class="k-val" style="color:var(--yellow)">${termoEnv}</div><div class="k-sub">de ${total}</div></div>
-    <div class="kcard ok"><div class="k-lbl">Termos Assinados</div><div class="k-val" style="color:var(--green)">${termoAss}</div><div class="k-sub">de ${termoEnv}</div></div>
-    <div class="kcard"><div class="k-lbl">Filtrados</div><div class="k-val">${filtered.length}</div><div class="k-sub">com filtros atuais</div></div>`;
+    <div class="kcard bad"><div class="k-lbl">Solicitações</div><div class="k-val" style="color:var(--red)">${solicitacoes}</div><div class="k-sub">${currentMes}</div></div>
+    <div class="kcard warn"><div class="k-lbl">Aguardando</div><div class="k-val" style="color:var(--yellow)">${aguardando}</div><div class="k-sub">ainda não liberado p/ termo</div></div>
+    <div class="kcard" style="border-left:3px solid #3B82F6"><div class="k-lbl">Liberados para Termo</div><div class="k-val" style="color:#3B82F6">${liberados}</div><div class="k-sub">de ${solicitacoes}</div></div>
+    <div class="kcard ok"><div class="k-lbl">Concluídos</div><div class="k-val" style="color:var(--green)">${concluidos}</div><div class="k-sub">termo assinado</div></div>`;
 
   // Gráfico motivos
   const motivoCount={};
@@ -2477,18 +2519,23 @@ function renderCanc(){
   });
 
   // Tabela
+  const STATUS_LABEL={aguardando:['Aguardando','var(--yellow)'],liberado:['Liberado p/ Termo','#3B82F6'],concluido:['Concluído','var(--green)']};
   const tbody=gid('canc-tbody');
-  tbody.innerHTML=filtered.map(v=>`
+  tbody.innerHTML=filtered.map(v=>{
+    const st=statusCancelamento(v);
+    const [stLabel,stCor]=STATUS_LABEL[st];
+    return`
     <tr>
       <td>${fmtDate(v.data)}</td>
       <td style="color:var(--mu2)">${v.idcli||'-'}</td>
       <td style="max-width:200px;white-space:normal;font-size:12px">${v.motivo||'-'}</td>
       <td style="font-weight:600">${v.atendente||'-'}</td>
       <td><span class="tag tag-bal">${v.contato||'-'}</span></td>
-      <td style="color:${v.termoEnv&&v.termoEnv.length>1?'var(--green)':'var(--red)'}">${v.termoEnv||'NÃO'}</td>
-      <td style="color:${v.termoAss==='SIM'?'var(--green)':'var(--red)'}">${v.termoAss||'NÃO'}</td>
+      <td style="color:${cancIsLiberado(v)?'var(--green)':'var(--red)'}">${normalizaFlagSN(v.liberado)||'NÃO'}</td>
+      <td style="color:${cancIsConcluido(v)?'var(--green)':'var(--red)'}">${v.termoAss||'NÃO'}</td>
+      <td style="color:${stCor};font-weight:600">${stLabel}</td>
       <td style="color:var(--mu2);font-size:12px">${v.dataCanc||'-'}</td>
-    </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--mu2);padding:30px">Nenhum cancelamento encontrado</td></tr>';
+    </tr>`;}).join('')||'<tr><td colspan="9" style="text-align:center;color:var(--mu2);padding:30px">Nenhum cancelamento encontrado</td></tr>';
   gid('canc-count').textContent=`${filtered.length} cancelamento(s) encontrado(s)`;
 }
 
